@@ -30,9 +30,11 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 ## Installation
 
-**From the ncSender plugin registry** (once listed): Settings → Plugins → Install Plugin → pick *G-code & grblHAL Reference*.
+**From the ncSender plugin registry** (once listed): in ncSender go to **Settings → Plugins → Install Plugin** and pick *G-code & grblHAL Reference*.
 
-**From a release ZIP**: download the latest ZIP from [Releases](../../releases), then ncSender → Settings → Plugins → Install Plugin → upload it.
+**From a release ZIP**: download the latest `com.cncdocs.gcode-reference_vX.Y.Z.zip` from the
+[releases page](https://github.com/modest-marmot/ncsender-plugin-gcode-reference/releases),
+then in ncSender: **Settings → Plugins → Install Plugin** → upload the ZIP.
 
 ## Controller applicability
 
