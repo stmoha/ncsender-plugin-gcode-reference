@@ -18,6 +18,8 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 **Reference browser** — 360+ entries with search, per-category color-keyed filters, syntax, parameter tables, examples and tips. Covers the grblHAL core dialect (motion, coordinate systems, probing, canned cycles, G65 built-in macros), common plugin M-codes, grblHAL `$` system commands, and **251 numbered settings through $772** with SLB-EXT factory defaults.
 
+<img width="997" height="637" alt="2026-07-12_16h15_29" src="https://github.com/user-attachments/assets/b29999d9-fc66-482f-aa44-da62158bb5ad" />
+
 **Live controller cross-check** — the plugin reads ncSender's cached `$ES`/`$$` enumeration (`/api/firmware`) and flags settings that don't exist on *your* firmware build, while showing the live current value of the ones that do.
 
 **Explain a line** — paste a whole program and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, `G10 L2`/`L20` combos, `G01`→`G1` normalization, and both comment styles.
