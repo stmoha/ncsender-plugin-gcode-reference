@@ -1,0 +1,24 @@
+<!-- G-code & grblHAL Reference - configuration + reference browser.
+     ncSender shows this file in two places:
+       1. Settings > Plugins > configure  (inside an iframe; the
+          __TOOL_MENU_LABEL__ token below is NOT replaced there)
+       2. Tools menu > "G-code Reference"  (as a dialog; the server
+          replaces the token)
+     The full UI - Reference, Explain a line, and Settings tabs
+     (terminal-lookup options + About/sources) - lives in the shared
+     core below; this wrapper only picks the default tab per context. -->
+
+@@REFERENCE_UI@@
+
+<script>
+  (function () {
+    // In the Tools-menu dialog the server replaces the token (including
+    // the one in the next line); from the Settings page it stays
+    // literal. The concatenated comparison string is immune.
+    var TML = '__TOOL_MENU_LABEL__';
+    var IS_DIALOG = TML !== ('__TOOL' + '_MENU_LABEL__');
+    // The Settings > Plugins page exists to configure, so land on the
+    // Settings tab there; the Tools-menu dialog lands on Reference.
+    if (!IS_DIALOG && window.grefSwitchTab) window.grefSwitchTab('settings');
+  })();
+</script>

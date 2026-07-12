@@ -1,0 +1,776 @@
+<!-- G-code Reference UI core. @@PAYLOAD@@ is replaced with the JSON data
+     bundle (database + initial state) either at plugin build time
+     (config.html) or at dialog-open time (commands.js). -->
+<style>
+  .gref { font-family: system-ui, -apple-system, sans-serif;
+          color: var(--color-text-primary, #e8eaed);
+          display: flex; flex-direction: column;
+          /* dynamic with the window, capped so the category chips settle
+             into two rows maximum (top row wider than bottom). 960px is a
+             fallback - at boot the script measures the first 8 rendered
+             chips and pins max-width to exactly that row, so the cap
+             tracks the host app's real button sizing. Narrower windows
+             wrap chips onto more rows responsively. */
+          width: 92vw; max-width: 960px;
+          height: 75vh; min-height: 420px; }
+  .gref * { box-sizing: border-box; }
+  .gref code, .gref .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* --- header: search --- */
+  .gref-head { padding: 12px 16px; border-bottom: 1px solid var(--color-border, #333a45);
+               display: flex; flex-direction: column; gap: 8px; }
+  .gref-search { width: 100%; padding: 10px 12px; font-size: 0.95rem;
+                 background: var(--color-surface-muted, #232a33); color: var(--color-text-primary, #e8eaed);
+                 border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px); }
+  .gref-search:focus { outline: none; border-color: var(--color-accent, #10b981); }
+  .gref-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .gref-chip { padding: 3px 10px; font-size: 0.75rem; border-radius: 999px;
+               border: 1px solid var(--color-border, #333a45); background: transparent;
+               color: var(--color-text-secondary, #9aa4b2); cursor: pointer; }
+  .gref-chip.active { background: var(--color-accent, #10b981); border-color: var(--color-accent, #10b981); color: #fff; }
+
+  /* --- results --- */
+  .gref-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .gref-count { font-size: 0.75rem; color: var(--color-text-secondary, #9aa4b2); margin-bottom: 8px; }
+  .gref-card { border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px);
+               margin-bottom: 8px; background: var(--color-surface-muted, #232a33); overflow: hidden; }
+  .gref-card-head { display: flex; align-items: center; gap: 8px;
+                    padding: 10px 12px; cursor: pointer; user-select: none; }
+  .gref-card-head:hover { background: var(--color-surface, #1a2027); }
+  .gref-codechip { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700;
+                   font-size: 0.85rem; color: var(--color-accent, #10b981);
+                   background: var(--color-surface, #1a2027); border: 1px solid var(--color-border, #333a45);
+                   padding: 2px 8px; border-radius: var(--radius-small, 6px); white-space: nowrap; }
+  .gref-name { flex: 1; font-size: 0.9rem; }
+  .gref-badge { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
+                color: var(--color-text-secondary, #9aa4b2); border: 1px solid var(--color-border, #333a45);
+                padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .gref-caret { color: var(--color-text-secondary, #9aa4b2); font-size: 0.7rem; transition: transform 0.15s; }
+  .gref-card.open .gref-caret { transform: rotate(90deg); }
+  .gref-detail { display: none; padding: 0 12px 12px; font-size: 0.85rem; line-height: 1.5; }
+  .gref-card.open .gref-detail { display: block; }
+  .gref-detail p { margin: 8px 0; }
+  .gref-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
+                color: var(--color-text-secondary, #9aa4b2); margin: 10px 0 4px; }
+  .gref-pre { background: var(--color-surface, #1a2027); border: 1px solid var(--color-border, #333a45);
+              border-radius: var(--radius-small, 6px); padding: 8px 10px; margin: 4px 0;
+              font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem;
+              white-space: pre-wrap; overflow-x: auto; }
+  .gref-params { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 0.8rem; }
+  .gref-params td { padding: 4px 8px; border-top: 1px solid var(--color-border, #333a45); vertical-align: top; }
+  .gref-params td:first-child { font-family: ui-monospace, Menlo, Consolas, monospace;
+                                font-weight: 700; color: var(--color-accent, #10b981); width: 3.5em; }
+  .gref-tip { border-left: 3px solid var(--color-accent, #10b981); padding: 6px 10px; margin: 8px 0;
+              background: var(--color-surface, #1a2027); border-radius: 0 var(--radius-small, 6px) var(--radius-small, 6px) 0;
+              color: var(--color-text-secondary, #9aa4b2); font-size: 0.8rem; }
+  .gref-empty { text-align: center; color: var(--color-text-secondary, #9aa4b2); padding: 40px 20px; font-size: 0.9rem; }
+
+  .gref-settings { flex: 1; overflow-y: auto; padding: 12px 0; display: none; }
+  .gcfg { font-family: system-ui, -apple-system, sans-serif;
+          color: var(--color-text-primary, #e8eaed); }
+  .gcfg-card { border: 1px solid var(--color-border, #333a45);
+               border-radius: var(--radius-small, 6px);
+               background: var(--color-surface-muted, #232a33);
+               padding: 14px 16px; margin: 0 16px 12px; }
+  .gcfg-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; }
+  .gcfg-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: 0.9rem; }
+  .gcfg-hint { color: var(--color-text-secondary, #9aa4b2); font-size: 0.78rem; margin: 2px 0 0 26px; }
+  .gcfg input[type="number"] { width: 90px !important; padding: 6px 8px; }
+  .gcfg code { font-family: ui-monospace, Menlo, Consolas, monospace;
+               background: var(--color-surface, #1a2027); border: 1px solid var(--color-border, #333a45);
+               padding: 1px 5px; border-radius: 4px; font-size: 0.8em; }
+  .gcfg-status { font-size: 0.75rem; color: var(--color-accent, #10b981); min-height: 1em; margin-left: 26px; }
+
+  /* --- explain tab --- */
+  .gref-exwrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
+  .gref-exinput { width: 100%; resize: vertical; padding: 10px 12px;
+                  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
+                  background: var(--color-surface-muted, #232a33); color: var(--color-text-primary, #e8eaed);
+                  border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px); }
+  .gref-btn { align-self: flex-start; padding: 8px 20px; border: none; cursor: pointer;
+              background: var(--color-accent, #10b981); color: #fff; font-size: 0.85rem;
+              border-radius: var(--radius-small, 6px); }
+  .gref-exline { border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px);
+                 background: var(--color-surface-muted, #232a33); margin-bottom: 8px; }
+  .gref-exline-src { padding: 8px 12px; border-bottom: 1px solid var(--color-border, #333a45);
+                     font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
+                     color: var(--color-accent, #10b981); }
+  .gref-exline-words { padding: 4px 0; }
+  .gref-word { display: flex; gap: 10px; padding: 5px 12px; font-size: 0.83rem; align-items: baseline; }
+  .gref-word + .gref-word { border-top: 1px dashed var(--color-border, #333a45); }
+  .gref-word-tok { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700;
+                   min-width: 5.5em; color: var(--color-accent, #10b981); }
+  .gref-word-desc { flex: 1; color: var(--color-text-primary, #e8eaed); }
+  .gref-word-desc .sub { color: var(--color-text-secondary, #9aa4b2); }
+  .gref-word.unknown .gref-word-tok { color: var(--color-text-secondary, #9aa4b2); }
+  .gref-foot { padding: 8px 16px; border-top: 1px solid var(--color-border, #333a45);
+               font-size: 0.72rem; color: var(--color-text-secondary, #9aa4b2); }
+  .gref-foot code { background: var(--color-surface-muted, #232a33); padding: 1px 5px;
+                    border-radius: 4px; border: 1px solid var(--color-border, #333a45); }
+</style>
+
+<div class="gref" id="gref-root">
+  <div class="gref-tabsbar" style="display:flex;gap:6px;padding:0 16px;border-bottom:1px solid var(--color-border, #333a45)">
+    <button class="gref-tab" id="gref-tab-reference" onclick="grefSwitchTab('reference')">
+      <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+      <span>Reference</span>
+    </button>
+    <button class="gref-tab" id="gref-tab-explain" onclick="grefSwitchTab('explain')">
+      <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+      <span>Explain a line</span>
+    </button>
+    <button class="gref-tab" id="gref-tab-manual" onclick="grefSwitchTab('manual')">
+      <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+      <span>Manual</span>
+    </button>
+    <button class="gref-tab" id="gref-tab-settings" style="display:none" onclick="grefSwitchTab('settings')">
+      <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <span>Settings</span>
+    </button>
+  </div>
+  <div class="gref-head">
+    <div id="gref-panel-search">
+      <input class="gref-search" id="gref-search" type="text"
+             placeholder="Search: G38.2, $110, dwell, tool change, laser..."
+             autocomplete="off" spellcheck="false">
+      <div class="gref-chips" id="gref-chips" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="gref-settings" id="gref-settings">
+    <div class="gcfg">
+      <div class="gcfg-card">
+        <div class="gcfg-title">Terminal lookup</div>
+        <div class="gcfg-row">
+          <input type="checkbox" id="gcfg-terminal-lookup" style="width:auto !important">
+          <label for="gcfg-terminal-lookup" style="margin:0;font-weight:400">
+            Enable <code>?keyword</code> / <code>??line</code> in the Console
+          </label>
+        </div>
+        <div class="gcfg-hint">Typing <code>?dwell</code> or <code>??G1 X10 F500</code> opens documentation
+          instead of sending the text to the controller; <code>??</code> alone opens this reference unfiltered.
+          A bare <code>?</code> (status query) is never intercepted.
+          The dialog pauses command streaming while open, so avoid lookups mid-job.</div>
+        <div class="gcfg-row" style="margin-top:14px">
+          <label for="gcfg-max-results" style="margin:0;font-weight:400">Max results for terminal lookups</label>
+          <input type="number" id="gcfg-max-results" min="1" max="50">
+        </div>
+        <div class="gcfg-status" id="gcfg-status"></div>
+      </div>
+
+      <div class="gcfg-card">
+        <div class="gcfg-title">About this reference</div>
+        <div style="font-size:0.83rem;line-height:1.55;color:var(--color-text-primary,#e8eaed)">
+          <p style="margin:6px 0"><b>Sources.</b> The documentation in this plugin is compiled from:</p>
+          <ul style="margin:4px 0 10px 18px;padding:0">
+            <li><a href="https://resources.sienci.com/view/slb-firmware-flashing/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Sienci Labs SLB/SLB&#8209;EXT firmware documentation</a> &mdash; the official settings tables, including SLB&#8209;EXT factory defaults and Sienci&rsquo;s &ldquo;unused&rdquo;/&ldquo;advanced&rdquo; notes.</li>
+            <li><a href="https://github.com/grblHAL/core" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">grblHAL core source</a> &mdash; the canonical setting registry and descriptions for mainline (Main_grblHAL) builds, including settings the Sienci tables don&rsquo;t cover and the current numbering (e.g. laser XY offset at $770/$771, formerly $741/$742 on SLB 5.0.x firmware).</li>
+            <li><a href="https://petervanderwalt.github.io/grblhal_docs/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">grblHAL community docs</a> &mdash; the complete G&#8209;code and M&#8209;code reference the command entries are based on.</li>
+            <li><a href="https://github.com/siganberg/ncSender" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">ncSender</a> &mdash; the plugin API, and the <code>/api/firmware</code> endpoint (ncSender&rsquo;s cache of your controller&rsquo;s own <code>$ES</code>/<code>$$</code> enumeration) that powers the live &ldquo;on this controller&rdquo; check.</li>
+            <li><a href="https://plugins.octoprint.org/plugins/marlingcodedocumentation/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">OctoPrint Marlin G&#8209;code Documentation</a> &mdash; the plugin that inspired this one.</li>
+          </ul>
+          <p style="margin:6px 0"><b>Which controllers this applies to.</b> ncSender can drive both grblHAL and FluidNC machines; this reference is written for the grblHAL dialect:</p>
+          <ul style="margin:4px 0 6px 18px;padding:0">
+            <li><b>Sienci SLB / SLB&#8209;EXT (grblHAL)</b> &mdash; fully covered. Defaults are labeled &ldquo;SLB&#8209;EXT default&rdquo;, Sienci&#8209;specific settings (button macros $450s, ring/rail LEDs $664/$665, spindle slots $511+) are included, and entries note where Main_grblHAL renumbered older SLB 5.0.x settings.</li>
+            <li><b>Other grblHAL boards</b> &mdash; core G/M&#8209;codes and settings apply as documented; Sienci&#8209;specific entries will simply be flagged &ldquo;not on this controller&rdquo; by the live check, since every grblHAL build only exposes the settings its features compile in.</li>
+            <li><b>FluidNC</b> &mdash; the basic G&#8209;code entries (motion, coordinate systems, spindle/coolant M&#8209;codes) largely apply since FluidNC descends from Grbl, but the numbered <code>$</code> settings do <b>not</b>: FluidNC is configured through a YAML file and <code>$/</code> tree commands instead. grblHAL extensions (G65 macros, M62&#8211;M68 I/O, canned cycles, plugin M&#8209;codes, <code>$ES</code>) are unavailable there, and the live controller check will report &ldquo;controller settings unavailable&rdquo;.</li>
+            <li><b>Classic Grbl 1.1</b> &mdash; the $0&#8211;$132 settings and core G/M&#8209;codes align; everything beyond that is grblHAL&#8209;only.</li>
+          </ul>
+          <p style="margin:6px 0;color:var(--color-text-secondary,#9aa4b2)">The live check reads ncSender&rsquo;s cached controller enumeration &mdash; after flashing new firmware, refresh ncSender&rsquo;s Firmware tab once so the cache re&#8209;queries, and this reference picks it up on next open.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gref-manual" id="gref-manual" style="display:none;flex:1;flex-direction:column;min-height:0">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:0.78rem;color:var(--color-text-secondary,#9aa4b2)">
+      <span>Browsing the official ncSender manual</span>
+      <span style="flex:1"></span>
+      <a href="https://siganberg.github.io/ncSender.manual/" target="_blank" rel="noopener"
+         style="color:var(--color-accent,#10b981);text-decoration:none">Open in new tab &#8599;</a>
+    </div>
+    <iframe id="gref-manual-frame" title="ncSender Manual"
+            style="flex:1;width:100%;border:0;border-top:1px solid var(--color-border,#333a45);background:#fff"></iframe>
+  </div>
+
+  <div class="gref-body" id="gref-body"></div>
+
+  <div class="gref-foot">
+    Terminal shortcuts: <code>?keyword</code> looks up docs (e.g. <code>?dwell</code>, <code>?$110</code>) &nbsp;&middot;&nbsp;
+    <code>??G1 X10 F500</code> explains a line word by word &nbsp;&middot;&nbsp;
+    <code>??</code> on its own opens this reference, unfiltered. Run <code>$ES</code> / <code>$EE</code> / <code>$EA</code> on the controller to enumerate everything your build supports.
+  </div>
+</div>
+
+<script>
+  (function () {
+    var DATA = @@PAYLOAD@@;
+
+    /* Per-category color keys with dark- and light-theme variants.
+       The dialog renders in ncSender's main document, so we detect the
+       active theme from the computed text color (dark text = light theme)
+       and pick the palette with proper contrast. Chips, entry code chips,
+       and badges all share these colors. */
+    var CATEGORIES = [
+      { id: 'all',      label: 'All',            dark: '#10b981', light: '#047857', accent: true },
+      { id: 'motion',   label: 'Motion',         dark: '#4da3ff', light: '#1565c0' },
+      { id: 'coords',   label: 'Coordinates',    dark: '#b48cff', light: '#6a3ab2' },
+      { id: 'probing',  label: 'Probing',        dark: '#ff9f43', light: '#c65a00' },
+      { id: 'spindle',  label: 'Spindle/Laser',  dark: '#ff6b81', light: '#c62839' },
+      { id: 'coolant',  label: 'Coolant',        dark: '#3ec1d3', light: '#00838f' },
+      { id: 'tool',     label: 'Tooling',        dark: '#ffd166', light: '#8d6e00' },
+      { id: 'cycles',   label: 'Canned Cycles',  dark: '#f78fb3', light: '#ad3b66' },
+      { id: 'modes',    label: 'Modes',          dark: '#7bed9f', light: '#2e7d32' },
+      { id: 'program',  label: 'Program Flow',   dark: '#c8d6e5', light: '#455a64' },
+      { id: 'io',       label: 'I/O',            dark: '#70a1ff', light: '#3949ab' },
+      { id: 'plugin',   label: 'Plugin M-codes', dark: '#e77f67', light: '#bf360c' },
+      { id: 'setting',  label: '$ Settings',     dark: '#2dd4bf', light: '#0f766e' },
+      { id: 'system',   label: '$ Commands',     dark: '#48dbfb', light: '#0277bd' }
+    ];
+
+    var IS_LIGHT = (function () {
+      try {
+        var el = document.getElementById('gref-root');
+        var c = (window.getComputedStyle ? window.getComputedStyle(el).color : '') || '';
+        var m = c.match(/(\d+)\D+(\d+)\D+(\d+)/);
+        if (!m) return false;
+        // dark text means light theme
+        return (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) < 128;
+      } catch (e) { return false; }
+    })();
+
+    var CAT_COLOR = {};
+    CATEGORIES.forEach(function (c) { CAT_COLOR[c.id] = IS_LIGHT ? c.light : c.dark; });
+    function catColor(id) { return CAT_COLOR[id] || (IS_LIGHT ? '#455a64' : '#9aa4b2'); }
+
+    /* Build one unified entry list with a type tag. */
+    var ALL = [];
+    DATA.gcodes.forEach(function (e) { e._type = 'gcode'; ALL.push(e); });
+    DATA.settings.forEach(function (e) {
+      ALL.push({ _type: 'setting', code: e.code, aliases: [], name: e.name,
+                 category: 'setting', modal: null, desc: e.desc, syntax: e.code + '=<value>',
+                 params: {}, example: e.code + '=1', tips: null, keywords: e.keywords });
+    });
+    DATA.system.forEach(function (e) {
+      ALL.push({ _type: 'system', code: e.code, aliases: [], name: e.name,
+                 category: 'system', modal: null, desc: e.desc, syntax: e.code,
+                 params: {}, example: e.code, tips: null, keywords: e.keywords });
+    });
+
+    /* code -> entry lookup map (canonical codes + aliases, uppercased). */
+    var CODEMAP = {};
+    ALL.forEach(function (e) {
+      CODEMAP[e.code.toUpperCase()] = e;
+      (e.aliases || []).forEach(function (a) { CODEMAP[a.toUpperCase()] = e; });
+    });
+
+    var state = { tab: DATA.initialTab || 'reference', query: DATA.initialQuery || '',
+                  category: 'all', explainText: DATA.initialExplain || '', open: {} };
+
+    /* ---------------- controller cross-check ----------------
+       ncSender caches the controller's own $ES/$$ enumeration and serves
+       it at /api/firmware. We use it to flag database settings that do
+       not exist on THIS machine's firmware build, and to show the live
+       value of the ones that do. Fails soft: no data, no flags. */
+    var MACHINE = { state: 'loading', has: {}, values: {}, fw: '' };
+
+    function apiBase() {
+      try {
+        if (window.ncSender && typeof window.ncSender.getApiBaseUrl === 'function')
+          return window.ncSender.getApiBaseUrl(null);
+      } catch (e) {}
+      try {
+        if (window.parent && window.parent.ncSender && typeof window.parent.ncSender.getApiBaseUrl === 'function')
+          return window.parent.ncSender.getApiBaseUrl(null);
+      } catch (e) {}
+      return '';
+    }
+
+    (function loadMachineSettings() {
+      if (typeof fetch === 'undefined') { MACHINE.state = 'unavailable'; return; }
+      try {
+        fetch(apiBase() + '/api/firmware')
+          .then(function (r) { return r && r.ok ? r.json() : null; })
+          .then(function (data) {
+            var settings = data && (data.settings || data.Settings);
+            if (settings && Object.keys(settings).length > 0) {
+              Object.keys(settings).forEach(function (k) {
+                if (!/^\d+$/.test(k)) return;
+                MACHINE.has[k] = true;
+                var v = settings[k] || {};
+                var val = (v.value !== undefined && v.value !== null) ? v.value
+                        : (v.Value !== undefined && v.Value !== null) ? v.Value : null;
+                if (val !== null) MACHINE.values[k] = String(val);
+              });
+              MACHINE.fw = String(data.firmwareVersion || data.FirmwareVersion || '');
+              MACHINE.state = 'ready';
+            } else {
+              MACHINE.state = 'unavailable';
+            }
+            if (state.tab === 'reference') renderReference();
+          })
+          .catch(function () {
+            MACHINE.state = 'unavailable';
+            if (state.tab === 'reference') renderReference();
+          });
+      } catch (e) { MACHINE.state = 'unavailable'; }
+    })();
+
+    /* ---------------- search ---------------- */
+    function normalizeCode(letter, num) {
+      // G01 -> G1, M06 -> M6, G38.2 stays G38.2
+      var n = parseFloat(num);
+      if (isNaN(n)) return letter.toUpperCase();
+      return letter.toUpperCase() + (n % 1 === 0 ? String(Math.round(n)) : String(n));
+    }
+
+    function search(query, category) {
+      var q = (query || '').trim().toLowerCase();
+      var results = [];
+      ALL.forEach(function (e) {
+        if (category !== 'all' && e.category !== category) return;
+        if (!q) { results.push({ e: e, score: 1 }); return; }
+        var score = 0;
+        var codeU = e.code.toLowerCase();
+        var aliasHit = (e.aliases || []).some(function (a) { return a.toLowerCase() === q; });
+        // exact / prefix code match (also try normalized: "g01" -> "g1")
+        var m = q.match(/^([a-z])0*(\d+(?:\.\d+)?)$/);
+        var qNorm = m ? (m[1] + parseFloat(m[2])) : q;
+        if (codeU === q || codeU === qNorm || aliasHit) score = 100;
+        else if (codeU.indexOf(qNorm) === 0 || codeU.indexOf(q) === 0) score = 60;
+        else if ((e.keywords || []).some(function (k) { return k === q; })) score = 50;
+        else if ((e.keywords || []).some(function (k) { return k.indexOf(q) !== -1; })) score = 30;
+        else if (e.name.toLowerCase().indexOf(q) !== -1) score = 25;
+        else if ((e.desc || '').toLowerCase().indexOf(q) !== -1) score = 10;
+        if (score > 0) results.push({ e: e, score: score });
+      });
+      results.sort(function (a, b) { return b.score - a.score; });
+      return results.map(function (r) { return r.e; });
+    }
+
+    /* ---------------- explain ---------------- */
+    function explainLine(line) {
+      var words = [];
+      var work = line;
+
+      // pull out comments first - they are annotations, not commands
+      work = work.replace(/\(([^)]*)\)/g, function (mm, inner) {
+        words.push({ tok: '(' + inner + ')', desc: 'Comment - ignored by the controller', kind: 'comment' });
+        return ' ';
+      });
+      var semi = work.indexOf(';');
+      if (semi !== -1) {
+        words.push({ tok: work.slice(semi), desc: 'Comment - everything after ; is ignored', kind: 'comment' });
+        work = work.slice(0, semi);
+      }
+
+      // whole-line $ system commands ($H, $J=..., $110=500, $$ ...)
+      var sysMatch = work.trim().match(/^(\$\d+=?|\$[A-Za-z#$+]*[=]?)(.*)$/);
+      if (sysMatch && work.trim().charAt(0) === '$') {
+        var head = sysMatch[1].replace(/=$/, '');
+        var rest = (sysMatch[2] || '').trim();
+        var numSetting = head.match(/^\$(\d+)$/);
+        var entry = CODEMAP[head.toUpperCase()] || CODEMAP[head.toUpperCase() + '='] || null;
+        if (numSetting && !entry) entry = CODEMAP['$' + numSetting[1]];
+        if (!entry && /^\$H[XYZABC]$/i.test(head)) entry = CODEMAP['$H'];
+        if (entry) {
+          words.push({ tok: head, desc: entry.name + ' - ' + entry.desc, kind: 'command' });
+        } else {
+          words.push({ tok: head, desc: 'grblHAL system command/setting (not in local DB - run $ES on the controller for details)', kind: 'unknown' });
+        }
+        if (head.toUpperCase() === '$J') {
+          // explain the jog body as G-code
+          var sub = explainLine(rest);
+          sub.forEach(function (w) { words.push(w); });
+          return words;
+        }
+        if (rest) {
+          words.push({ tok: rest, desc: numSetting ? 'New value for this setting' : 'Argument', kind: 'value' });
+        }
+        return words;
+      }
+
+      // tokenize letter+number words
+      var re = /([A-Za-z])\s*([+-]?(?:\d+\.?\d*|\.\d+))/g;
+      var tokens = [];
+      var mtk;
+      while ((mtk = re.exec(work)) !== null) {
+        tokens.push({ letter: mtk[1].toUpperCase(), value: mtk[2] });
+      }
+
+      // first pass: identify command words (G/M with a DB entry),
+      // including two-word forms like "G10 L2" / "G10 L20"
+      var cmdEntries = [];
+      tokens.forEach(function (t) {
+        t.code = normalizeCode(t.letter, t.value);
+        if (t.letter === 'G' || t.letter === 'M') {
+          var entry = CODEMAP[t.code];
+          // special-case G10: combine with its L word for the right doc
+          if (t.code === 'G10') {
+            var lTok = null;
+            for (var li = 0; li < tokens.length; li++) {
+              if (tokens[li].letter === 'L') { lTok = tokens[li]; break; }
+            }
+            if (lTok) {
+              var combo = CODEMAP['G10 L' + parseFloat(lTok.value)];
+              if (combo) { entry = combo; lTok.consumedByG10 = true; }
+            }
+          }
+          if (entry) { t.entry = entry; cmdEntries.push(entry); }
+        }
+        if (t.letter === 'T') { t.entry = null; t.isT = true; }
+      });
+
+      // second pass: build word annotations
+      tokens.forEach(function (t) {
+        if (t.entry) {
+          words.push({ tok: t.letter + t.value,
+                       desc: t.entry.name + (t.entry.modal ? ' [' + t.entry.modal + ']' : ''),
+                       sub: t.entry.desc, kind: 'command' });
+          return;
+        }
+        if (t.letter === 'N') {
+          words.push({ tok: t.letter + t.value, desc: 'Line number ' + t.value + ' - ignored by execution', kind: 'value' });
+          return;
+        }
+        if (t.isT) {
+          words.push({ tok: 'T' + t.value, desc: 'Tool select - pre-selects tool ' + parseFloat(t.value) + ' for M6', kind: 'value' });
+          return;
+        }
+        if (t.consumedByG10) {
+          words.push({ tok: 'L' + t.value, desc: 'Data mode for G10 (' + parseFloat(t.value) + ')', kind: 'value' });
+          return;
+        }
+        // parameter: find the first command on the line documenting this letter
+        var meaning = null;
+        for (var ci = 0; ci < cmdEntries.length; ci++) {
+          if (cmdEntries[ci].params && cmdEntries[ci].params[t.letter]) {
+            meaning = cmdEntries[ci].params[t.letter] + '  (for ' + cmdEntries[ci].code + ')';
+            break;
+          }
+        }
+        if (!meaning) meaning = DATA.letters[t.letter] || 'Unrecognized word';
+        words.push({ tok: t.letter + t.value, desc: meaning + ' = ' + t.value,
+                     kind: meaning === 'Unrecognized word' ? 'unknown' : 'value' });
+      });
+
+      if (words.length === 0) {
+        words.push({ tok: line.trim() || '(empty)', desc: 'Nothing recognizable on this line', kind: 'unknown' });
+      }
+      return words;
+    }
+
+    /* ---------------- rendering ---------------- */
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function badgeFor(e) {
+      var cat = null;
+      for (var i = 0; i < CATEGORIES.length; i++) {
+        if (CATEGORIES[i].id === e.category) { cat = CATEGORIES[i]; break; }
+      }
+      return cat ? cat.label : e.category;
+    }
+
+    function renderCard(e) {
+      var cc = catColor(e.category);
+      var absentColor = IS_LIGHT ? '#c62839' : '#ff6b81';
+      var open = state.open[e.code] ? ' open' : '';
+      // controller cross-check applies to numeric $ settings only
+      var mnum = e.code.match(/^\$(\d+)$/);
+      var onMachine = null, liveVal;
+      if (mnum && MACHINE.state === 'ready') {
+        onMachine = !!MACHINE.has[mnum[1]];
+        liveVal = MACHINE.values[mnum[1]];
+      }
+      var html = '<div class="gref-card' + open + '" data-code="' + esc(e.code) + '">';
+      html += '<div class="gref-card-head" onclick="grefToggle(this)"' + (onMachine === false ? ' style="opacity:0.55"' : '') + '>';
+      html += '<span class="gref-caret">&#9654;</span>';
+      // code text matches its category filter color (association at a glance)
+      html += '<span class="gref-codechip" style="color:' + cc + ';border:1px solid ' + cc + '55;background:var(--color-surface,#1a2027)">' + esc(e.code) + '</span>';
+      html += '<span class="gref-name">' + esc(e.name) + '</span>';
+      if (onMachine === true && liveVal !== undefined) {
+        html += '<span class="gref-codechip" title="Current value on this controller" style="color:var(--color-accent,#10b981);border:1px solid var(--color-border,#333a45);background:var(--color-surface,#1a2027);font-weight:600">= ' + esc(liveVal) + '</span>';
+      }
+      if (onMachine === false) {
+        html += '<span class="gref-badge" style="color:' + absentColor + ';border:1px solid ' + absentColor + '55;opacity:0.9">not on this controller</span>';
+      }
+      html += '<span class="gref-badge" style="color:' + cc + ';border:1px solid ' + cc + '55;opacity:0.85">' + esc(badgeFor(e)) + '</span>';
+      html += '</div><div class="gref-detail">';
+      if (onMachine === true && liveVal !== undefined) {
+        html += '<div class="gref-label">Current value on this controller</div><div class="gref-pre">' + esc(e.code) + '=' + esc(liveVal) + '</div>';
+      }
+      if (onMachine === false) {
+        html += '<div class="gref-tip" style="border-left-color:' + absentColor + '">Your controller&rsquo;s $ES enumeration does not include this setting &mdash; this firmware build does not have the feature compiled in, or its plugin is disabled.</div>';
+      }
+      html += '<p>' + esc(e.desc) + '</p>';
+      if (e.modal) html += '<p class="sub" style="color:var(--color-text-secondary,#9aa4b2);font-size:0.78rem">Modal group: ' + esc(e.modal) + '</p>';
+      if (e.syntax) { html += '<div class="gref-label">Syntax</div><div class="gref-pre">' + esc(e.syntax) + '</div>'; }
+      var pkeys = Object.keys(e.params || {});
+      if (pkeys.length) {
+        html += '<div class="gref-label">Parameters</div><table class="gref-params">';
+        pkeys.forEach(function (k) { html += '<tr><td>' + esc(k) + '</td><td>' + esc(e.params[k]) + '</td></tr>'; });
+        html += '</table>';
+      }
+      if (e.example) { html += '<div class="gref-label">Example</div><div class="gref-pre">' + esc(e.example) + '</div>'; }
+      if (e.tips) { html += '<div class="gref-tip">' + esc(e.tips) + '</div>'; }
+      html += '</div></div>';
+      return html;
+    }
+
+    function renderReference() {
+      var body = document.getElementById('gref-body');
+      var results = search(state.query, state.category);
+      // terminal lookups honor maxResults; interactive searches show everything
+      var isTerminalLookup = !!state.query && state.query === DATA.initialQuery;
+      var shown = isTerminalLookup ? results.slice(0, DATA.maxResults || 8) : results;
+      var html = '';
+      if (results.length === 0) {
+        html = '<div class="gref-empty">No matches for &ldquo;' + esc(state.query) + '&rdquo;.<br>' +
+               'Try a code (G38.2, $110, M6) or a keyword (dwell, probe, laser, tool change).</div>';
+      } else {
+        var status = '';
+        if (MACHINE.state === 'ready') {
+          status = ' &middot; checked against your controller' + (MACHINE.fw ? ' (' + esc(MACHINE.fw) + ')' : '');
+        } else if (MACHINE.state === 'unavailable') {
+          status = ' &middot; controller settings unavailable &mdash; cannot flag which exist on your machine';
+        }
+        html += '<div class="gref-count">' + shown.length +
+                (shown.length < results.length ? ' of ' + results.length : '') +
+                ' entr' + (shown.length === 1 ? 'y' : 'ies') + status + '</div>';
+        // auto-expand the top hit of a terminal lookup
+        if (state.query && shown.length > 0) state.open[shown[0].code] = true;
+        shown.forEach(function (e) { html += renderCard(e); });
+      }
+      body.innerHTML = html;
+    }
+
+    function renderExplain() {
+      var body = document.getElementById('gref-body');
+      var hasOut = !!state.explainText.trim();
+      // empty: textarea flex-fills the dialog height; with results:
+      // collapse to a compact editor so the breakdown gets the room
+      var taStyle = hasOut ? 'flex:0 0 auto;height:130px;' : 'flex:1 1 auto;min-height:160px;';
+      var html = '<div class="gref-exwrap">';
+      html += '<textarea class="gref-exinput" id="gref-exinput" style="' + taStyle + '" placeholder="Paste one or more lines of G-code, e.g.&#10;G90 G21 G17&#10;G1 X10 Y5 F500&#10;M4 S800" spellcheck="false">' + esc(state.explainText) + '</textarea>';
+      html += '<button class="gref-btn" onclick="grefRunExplain()">Explain</button>';
+      html += '<div id="gref-exout">';
+      if (hasOut) html += renderExplainOutput(state.explainText);
+      html += '</div></div>';
+      body.innerHTML = html;
+    }
+
+    function renderExplainOutput(text) {
+      var out = '';
+      text.split(/\r?\n/).forEach(function (line) {
+        if (!line.trim()) return;
+        var wordsArr = explainLine(line);
+        out += '<div class="gref-exline"><div class="gref-exline-src">' + esc(line.trim()) + '</div><div class="gref-exline-words">';
+        wordsArr.forEach(function (w) {
+          out += '<div class="gref-word ' + esc(w.kind) + '">';
+          out += '<span class="gref-word-tok">' + esc(w.tok) + '</span>';
+          out += '<span class="gref-word-desc">' + esc(w.desc);
+          if (w.sub) out += '<br><span class="sub">' + esc(w.sub) + '</span>';
+          out += '</span></div>';
+        });
+        out += '</div></div>';
+      });
+      return out || '<div class="gref-empty">Nothing to explain yet.</div>';
+    }
+
+    function renderChips() {
+      var el = document.getElementById('gref-chips');
+      // Inline styles throughout: the dialog lives in ncSender's main
+      // document, whose global button styling otherwise overrides our
+      // classes. Inline always wins.
+      el.innerHTML = CATEGORIES.map(function (c) {
+        var active = state.category === c.id;
+        var col = IS_LIGHT ? c.light : c.dark;
+        // "All" matches the Reference/Explain buttons' accent highlight
+        var fill = c.accent ? 'var(--color-accent, ' + col + ')' : col;
+        var activeText = (c.accent || IS_LIGHT) ? '#fff' : '#10151c';
+        var style;
+        if (active) {
+          style = 'background:' + fill + ';border:1px solid ' + fill +
+                  ';color:' + activeText + ';font-weight:600;opacity:1;';
+        } else {
+          style = 'background:transparent;border:1px solid ' + col +
+                  ';color:' + col + ';font-weight:400;opacity:0.55;';
+        }
+        return '<button class="gref-chip" style="' + style + '" ' +
+               'onmouseover="this.style.opacity=1" ' +
+               'onmouseout="this.style.opacity=' + (active ? 1 : 0.55) + '" ' +
+               'onclick="grefSetCategory(&quot;' + c.id + '&quot;)">' + esc(c.label) + '</button>';
+      }).join('');
+    }
+
+    function styleTab(el, active, visible) {
+      // native ncSender tab look: transparent, icon + label, accent
+      // underline on the active tab (inline styles beat host button CSS)
+      el.style.display = visible === false ? 'none' : 'inline-flex';
+      el.style.alignItems = 'center';
+      el.style.gap = '7px';
+      el.style.padding = '11px 14px';
+      el.style.background = 'transparent';
+      el.style.border = 'none';
+      el.style.borderRadius = '0';
+      el.style.cursor = 'pointer';
+      el.style.fontSize = '0.9rem';
+      el.style.marginBottom = '-1px'; // underline sits on the bar's border
+      el.style.borderBottom = active
+        ? '2px solid var(--color-accent, #10b981)'
+        : '2px solid transparent';
+      el.style.color = active
+        ? 'var(--color-text-primary, #e8eaed)'
+        : 'var(--color-text-secondary, #9aa4b2)';
+      el.style.fontWeight = active ? '600' : '400';
+      el.style.opacity = '1';
+      try {
+        var ic = el.querySelector ? el.querySelector('.gref-tab-ic') : null;
+        if (ic) ic.style.color = active ? 'var(--color-accent, #10b981)' : 'inherit';
+      } catch (e) {}
+    }
+
+    var MANUAL_URL = 'https://siganberg.github.io/ncSender.manual/';
+
+    function renderTabs() {
+      styleTab(document.getElementById('gref-tab-reference'), state.tab === 'reference');
+      styleTab(document.getElementById('gref-tab-explain'), state.tab === 'explain');
+      styleTab(document.getElementById('gref-tab-manual'), state.tab === 'manual');
+      styleTab(document.getElementById('gref-tab-settings'), state.tab === 'settings', !!DATA.showSettingsTab);
+      document.getElementById('gref-panel-search').style.display = state.tab === 'reference' ? '' : 'none';
+    }
+
+    function render() {
+      renderTabs();
+      var body = document.getElementById('gref-body');
+      var slot = document.getElementById('gref-settings');
+      var manual = document.getElementById('gref-manual');
+      body.style.display = 'none';
+      slot.style.display = 'none';
+      manual.style.display = 'none';
+      if (state.tab === 'settings') {
+        slot.style.display = 'block';
+        return;
+      }
+      if (state.tab === 'manual') {
+        manual.style.display = 'flex';
+        // lazy-load: only hit the manual site the first time the tab opens
+        var frame = document.getElementById('gref-manual-frame');
+        if (frame && !frame.src) frame.src = MANUAL_URL;
+        return;
+      }
+      body.style.display = '';
+      if (state.tab === 'reference') { renderChips(); renderReference(); }
+      else renderExplain();
+    }
+
+    /* ---------------- global handlers (dialog scope) ---------------- */
+    window.grefSwitchTab = function (tab) { state.tab = tab; render(); };
+    window.grefSetCategory = function (cat) { state.category = cat; render(); };
+    window.grefToggle = function (headEl) {
+      var card = headEl.parentElement;
+      var code = card.getAttribute('data-code');
+      state.open[code] = !state.open[code];
+      card.classList.toggle('open');
+    };
+    window.grefRunExplain = function () {
+      var ta = document.getElementById('gref-exinput');
+      state.explainText = ta.value;
+      document.getElementById('gref-exout').innerHTML = renderExplainOutput(state.explainText);
+      // collapse the editor once there are results; expand back if cleared
+      if (state.explainText.trim()) {
+        ta.style.flex = '0 0 auto'; ta.style.height = '130px'; ta.style.minHeight = '0';
+      } else {
+        ta.style.flex = '1 1 auto'; ta.style.height = ''; ta.style.minHeight = '160px';
+      }
+    };
+
+    /* ---------------- settings tab wiring ---------------- */
+    if (DATA.showSettingsTab) (function initSettings() {
+      var chk = document.getElementById('gcfg-terminal-lookup');
+      var num = document.getElementById('gcfg-max-results');
+      var statusEl = document.getElementById('gcfg-status');
+      if (!chk || !num || typeof chk.addEventListener !== 'function') return;
+
+      var SETTINGS_URL = apiBase() + '/api/plugins/com.cncdocs.gcode-reference/settings';
+
+      function applySettings(s) {
+        s = s || {};
+        chk.checked = s.terminalLookup !== false && s.terminalLookup !== 'false';
+        var n = parseInt(s.maxResults, 10);
+        num.value = isNaN(n) || n < 1 ? 8 : Math.min(n, 50);
+      }
+
+      if (typeof fetch !== 'undefined') {
+        try {
+          fetch(SETTINGS_URL)
+            .then(function (r) { return r && r.ok ? r.json() : {}; })
+            .then(applySettings)
+            .catch(function () { applySettings({}); });
+        } catch (e) { applySettings({}); }
+      } else {
+        applySettings({});
+      }
+
+      var saveTimer = null;
+      function save() {
+        if (typeof fetch === 'undefined') return;
+        var body = JSON.stringify({
+          terminalLookup: chk.checked,
+          maxResults: Math.max(1, Math.min(50, parseInt(num.value, 10) || 8))
+        });
+        fetch(SETTINGS_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: body
+        }).then(function (r) {
+          statusEl.textContent = r && r.ok ? 'Saved' : 'Save failed';
+          if (saveTimer) clearTimeout(saveTimer);
+          saveTimer = setTimeout(function () { statusEl.textContent = ''; }, 2000);
+        }).catch(function () {
+          statusEl.textContent = 'Save failed';
+        });
+      }
+
+      chk.addEventListener('change', save);
+      num.addEventListener('change', save);
+    })();
+
+    /* ---------------- boot ---------------- */
+    render();
+    // Pin max-width to the REAL rendered width of the first 8 category
+    // chips (All .. Canned Cycles) so at maximum size the chips settle
+    // into exactly two rows, top row wider than the bottom. Measuring
+    // the live DOM (not estimating) accounts for any padding/font the
+    // host app's CSS adds to buttons. Narrower windows still wrap the
+    // chips responsively onto more rows via flex-wrap. Set once on the
+    // root, so all three tabs share the identical width.
+    (function fitWidthToChipRow() {
+      try {
+        if (state.tab !== 'reference') return; // chips not rendered - keep CSS fallback
+        var chipsEl = document.getElementById('gref-chips');
+        var kids = chipsEl && chipsEl.children;
+        if (!kids || kids.length < 8 || !kids[0].offsetWidth) return;
+        var w = 0;
+        for (var i = 0; i < 8; i++) w += kids[i].offsetWidth;
+        w += 7 * 6;  // flex gaps between the 8 chips
+        w += 48;     // container horizontal padding + scrollbar allowance
+        var px = Math.ceil(w);
+        if (px > 500 && px < 2200) {
+          document.getElementById('gref-root').style.maxWidth = px + 'px';
+        }
+      } catch (e) { /* keep the CSS fallback */ }
+    })();
+    var searchEl = document.getElementById('gref-search');
+    searchEl.value = state.query;
+    searchEl.addEventListener('input', function () {
+      state.query = searchEl.value;
+      state.open = {}; // collapse on new search
+      renderReference();
+    });
+    if (state.tab === 'reference') searchEl.focus();
+  })();
+</script>

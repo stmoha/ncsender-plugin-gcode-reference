@@ -1,0 +1,33 @@
+{
+  "id": "com.cncdocs.gcode-reference",
+  "name": "G-code & grblHAL Reference",
+  "version": "1.10.0",
+  "minAppVersion": "0.3.111",
+  "platforms": {
+    "v1": "0.3.111",
+    "pro-v1": "0.3.111",
+    "pro-v2": "2.0.0"
+  },
+  "author": "Stefan",
+  "description": "Inline G-code, M-code and grblHAL settings documentation. Type ?keyword in the Console to look up commands, ??<line> to explain a line word by word, or browse the full reference from the Tools menu.",
+  "category": "utility",
+  "icon": "icon.png",
+  "priority": 40,
+  "commands": "commands.js",
+  "configUi": "config.html",
+  "events": [
+    "onBeforeCommand"
+  ],
+  "permissions": [
+    "gcode.modify"
+  ],
+  "toolMenu": [
+    {
+      "id": "open-reference",
+      "label": "G-code Reference",
+      "icon": "icon.png",
+      "clientOnly": true
+    }
+  ],
+  "entry": "index.js"
+}
