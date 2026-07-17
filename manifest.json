@@ -1,7 +1,7 @@
 {
   "id": "com.cncdocs.gcode-reference",
   "name": "G-code & grblHAL Reference",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "minAppVersion": "0.3.111",
   "platforms": {
     "v1": "0.3.111",
@@ -13,6 +13,7 @@
   "category": "utility",
   "icon": "icon.png",
   "priority": 40,
+  "entry": "index.js",
   "commands": "commands.js",
   "configUi": "config.html",
   "events": [
