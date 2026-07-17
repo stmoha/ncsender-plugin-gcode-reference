@@ -29,12 +29,8 @@
 /** Sanitize persisted settings (required by the plugin host). */
 function buildInitialConfig(raw) {
   if (!raw) raw = {};
-  var maxResults = parseInt(raw.maxResults, 10);
-  if (isNaN(maxResults) || maxResults < 1) maxResults = 8;
-  if (maxResults > 50) maxResults = 50;
   return {
-    terminalLookup: raw.terminalLookup === undefined ? true : raw.terminalLookup !== false && raw.terminalLookup !== 'false',
-    maxResults: maxResults
+    terminalLookup: raw.terminalLookup === undefined ? true : raw.terminalLookup !== false && raw.terminalLookup !== 'false'
   };
 }
 
@@ -48,7 +44,6 @@ function buildDialogHTML(opts) {
     initialTab: opts.initialTab || 'reference',
     initialQuery: opts.initialQuery || '',
     initialExplain: opts.initialExplain || '',
-    maxResults: opts.maxResults || 8,
     showSettingsTab: true
   };
   // split/join (not String.replace) so '$' sequences in the JSON - like
@@ -91,22 +86,19 @@ function onBeforeCommand(commands, context, settings) {
       if (isBlank) {
         title = 'G-code Reference';
         html = buildDialogHTML({
-          initialTab: 'reference',
-          maxResults: settings.maxResults
+          initialTab: 'reference'
         });
       } else if (explainMatch) {
         title = 'G-code Reference - Explain';
         html = buildDialogHTML({
           initialTab: 'explain',
-          initialExplain: explainMatch[1],
-          maxResults: settings.maxResults
+          initialExplain: explainMatch[1]
         });
       } else {
         title = 'G-code Reference';
         html = buildDialogHTML({
           initialTab: 'reference',
-          initialQuery: lookupMatch[1],
-          maxResults: settings.maxResults
+          initialQuery: lookupMatch[1]
         });
       }
 
