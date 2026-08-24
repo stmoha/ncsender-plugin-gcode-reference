@@ -12,7 +12,8 @@
              tracks the host app's real button sizing. Narrower windows
              wrap chips onto more rows responsively. */
           width: 92vw; max-width: 960px;
-          height: 75vh; min-height: 420px; }
+          height: 75vh; min-height: 420px;
+          overflow-x: hidden; }
   .gref * { box-sizing: border-box; }
   .gref code, .gref .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
@@ -94,7 +95,8 @@
                  background: var(--color-surface-muted, #232a33); margin-bottom: 8px; }
   .gref-exline-src { padding: 8px 12px; border-bottom: 1px solid var(--color-border, #333a45);
                      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
-                     color: var(--color-accent, #10b981); }
+                     color: var(--color-accent, #10b981);
+                       white-space: pre-wrap; overflow-wrap: anywhere; }
   .gref-exline-words { padding: 4px 0; }
   .gref-word { display: flex; gap: 10px; padding: 5px 12px; font-size: 0.83rem; align-items: baseline; }
   .gref-word + .gref-word { border-top: 1px dashed var(--color-border, #333a45); }
@@ -219,7 +221,7 @@
       { id: 'modes',    label: 'Modes',          dark: '#7bed9f', light: '#2e7d32' },
       { id: 'program',  label: 'Program Flow',   dark: '#c8d6e5', light: '#455a64' },
       { id: 'io',       label: 'I/O',            dark: '#70a1ff', light: '#3949ab' },
-      { id: 'plugin',   label: 'Plugin M-codes', dark: '#e77f67', light: '#bf360c' },
+      { id: 'plugin',   label: 'Plugin codes', dark: '#e77f67', light: '#bf360c' },
       { id: 'setting',  label: '$ Settings',     dark: '#2dd4bf', light: '#0f766e' },
       { id: 'system',   label: '$ Commands',     dark: '#48dbfb', light: '#0277bd' }
     ];
@@ -264,7 +266,16 @@
                   category: 'all', explainText: DATA.initialExplain || '', open: {},
                   gfile: { status: 'idle', name: '', lines: [] },
                   gsel: { anchor: -1, from: -1, to: -1 }, gfocus: -1,
-                  fsearch: { q: '', matches: [], cur: -1 } };
+                  fsearch: { q: '', matches: [], cur: -1 },
+                  src: 'file', paste: { text: '', lines: [] }, rendered: 0, splitPct: 42 };
+    // terminal ??<line> payloads open as pasted code so line numbers,
+    // click-to-locate and find all work on them
+    if (DATA.initialExplain) {
+      state.src = 'paste';
+      state.paste.text = DATA.initialExplain;
+      state.paste.lines = DATA.initialExplain.split(/\r?\n/);
+      state.gsel = { anchor: 0, from: 0, to: state.paste.lines.length - 1 };
+    }
 
     /* ---------------- controller cross-check ----------------
        ncSender caches the controller's own $ES/$$ enumeration and serves
@@ -363,8 +374,8 @@
         work = work.slice(0, semi);
       }
 
-      // whole-line $ system commands ($H, $J=..., $110=500, $$ ...)
-      var sysMatch = work.trim().match(/^(\$\d+=?|\$[A-Za-z#$+]*[=]?)(.*)$/);
+      // whole-line $ system commands ($H, $J=..., $110=500, $$, $SLOT3, $ADB_RETRACT ...)
+      var sysMatch = work.trim().match(/^(\$\d+=?|\$[A-Za-z][A-Za-z0-9_]*=?|\$[#$+]*=?)(.*)$/);
       if (sysMatch && work.trim().charAt(0) === '$') {
         var head = sysMatch[1].replace(/=$/, '');
         var rest = (sysMatch[2] || '').trim();
@@ -372,6 +383,7 @@
         var entry = CODEMAP[head.toUpperCase()] || CODEMAP[head.toUpperCase() + '='] || null;
         if (numSetting && !entry) entry = CODEMAP['$' + numSetting[1]];
         if (!entry && /^\$H[XYZABC]$/i.test(head)) entry = CODEMAP['$H'];
+        if (!entry && /^\$SLOT0*\d+$/i.test(head)) entry = CODEMAP['$SLOT1']; // Rapid Change ATC slots
         if (entry) {
           words.push({ tok: head, desc: entry.name + ' - ' + entry.desc, kind: 'command' });
         } else {
@@ -389,11 +401,31 @@
         return words;
       }
 
-      // tokenize letter+number words
+      // tokenize letter+number words, tracking what each match consumes so
+      // anything left over can be flagged as not-G-code
+      var consumed = [];
+      function markSpan(from, len) { consumed.push([from, from + len]); }
+
+      // grblHAL macro / flow-control syntax is valid even though it isn't
+      // letter+number words: o-words, #<vars>, [expressions], keywords
+      var FLOW_RE = /(^[oO]\d+)|(#<[^>]*>)|(#\d+)|(\[[^\]]*\])|\b(IF|THEN|ELSE|ELSEIF|ENDIF|WHILE|ENDWHILE|DO|REPEAT|ENDREPEAT|SUB|ENDSUB|CALL|RETURN|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|MOD)\b/g;
+      var fm;
+      while ((fm = FLOW_RE.exec(work)) !== null) {
+        markSpan(fm.index, fm[0].length);
+        words.push({ tok: fm[0], desc: 'grblHAL macro / expression syntax', kind: 'value' });
+      }
+
       var re = /([A-Za-z])\s*([+-]?(?:\d+\.?\d*|\.\d+))/g;
       var tokens = [];
       var mtk;
       while ((mtk = re.exec(work)) !== null) {
+        // skip letter+number pairs inside spans already claimed by flow syntax
+        var inFlow = false;
+        for (var fi = 0; fi < consumed.length; fi++) {
+          if (mtk.index >= consumed[fi][0] && mtk.index < consumed[fi][1]) { inFlow = true; break; }
+        }
+        if (inFlow) continue;
+        markSpan(mtk.index, mtk[0].length);
         tokens.push({ letter: mtk[1].toUpperCase(), value: mtk[2] });
       }
 
@@ -451,6 +483,27 @@
         if (!meaning) meaning = DATA.letters[t.letter] || 'Unrecognized word';
         words.push({ tok: t.letter + t.value, desc: meaning + ' = ' + t.value,
                      kind: meaning === 'Unrecognized word' ? 'unknown' : 'value' });
+      });
+
+      // anything not consumed by comments, flow syntax, or recognized
+      // letter+number words is residue - flag it as not valid G-code
+      var mask = new Array(work.length);
+      consumed.forEach(function (span) {
+        for (var mi = span[0]; mi < span[1] && mi < work.length; mi++) mask[mi] = true;
+      });
+      var frag = '';
+      var frags = [];
+      for (var wi = 0; wi <= work.length; wi++) {
+        var chr = wi < work.length ? work.charAt(wi) : ' ';
+        if (wi < work.length && !mask[wi] && !/\s/.test(chr)) {
+          frag += chr;
+        } else if (frag) {
+          frags.push(frag); frag = '';
+        }
+      }
+      frags.slice(0, 6).forEach(function (f) {
+        words.push({ tok: f.length > 40 ? f.slice(0, 40) + '\u2026' : f,
+                     desc: 'Not recognized as G-code', kind: 'invalid' });
       });
 
       if (words.length === 0) {
@@ -544,7 +597,7 @@
       body.innerHTML = html;
     }
 
-    var MAX_FILE_ROWS = 20000;
+    var CHUNK_ROWS = 4000; // rows rendered per batch; scrolling/jumping loads more
     var SEL_BG = 'rgba(16,185,129,0.18)';
 
     /* ---- G-code syntax coloring ----
@@ -672,8 +725,15 @@
       }
     }
 
+    function activeSrc() {
+      if (state.src === 'paste') {
+        return { ready: state.paste.lines.length > 0, lines: state.paste.lines };
+      }
+      return { ready: state.gfile.status === 'ready', lines: state.gfile.lines };
+    }
+
     function exStartLine() {
-      return (state.gfile.status === 'ready' && state.gsel.from >= 0) ? state.gsel.from : null;
+      return (activeSrc().ready && state.gsel.from >= 0) ? state.gsel.from : null;
     }
 
     function updateJumpInput() {
@@ -725,36 +785,127 @@
              'background:' + (selected ? SEL_BG : 'transparent') + ';';
     }
 
+    function buildRows(lines, from, to, numW) {
+      var html = '';
+      for (var i = from; i < to; i++) {
+        var selected = i >= state.gsel.from && i <= state.gsel.to;
+        html += '<div data-i="' + i + '" onclick="grefLineClick(event,' + i + ')" style="' + fileRowStyle(selected) + '">' +
+                '<span style="color:var(--color-text-secondary,#9aa4b2);min-width:' + numW + 'ch;text-align:right;user-select:none">' + (i + 1) + '</span>' +
+                '<span style="flex:1;min-width:0;white-space:pre;overflow:hidden;text-overflow:ellipsis">' + (lines[i] ? hlGcode(lines[i]) : '&nbsp;') + '</span></div>';
+      }
+      return html;
+    }
+
+    function updateRenderNote() {
+      var el = document.getElementById('gref-rendernote');
+      if (!el) return;
+      var a = activeSrc();
+      if (a.ready && state.rendered < a.lines.length) {
+        el.style.display = '';
+        el.innerHTML = 'Rendered ' + state.rendered + ' of ' + a.lines.length +
+                       ' lines &mdash; scroll on, or jump/search/"end" to load the rest instantly';
+      } else {
+        el.style.display = 'none';
+      }
+    }
+
+    function appendChunk() {
+      var a = activeSrc();
+      if (!a.ready) return;
+      var list = document.getElementById('gref-filelist');
+      if (!list) return;
+      var n = a.lines.length;
+      if (state.rendered >= n) return;
+      var to = Math.min(n, state.rendered + CHUNK_ROWS);
+      var html = buildRows(a.lines, state.rendered, to, String(n).length);
+      if (typeof list.insertAdjacentHTML === 'function') list.insertAdjacentHTML('beforeend', html);
+      else list.innerHTML += html;
+      state.rendered = to;
+      updateRenderNote();
+    }
+
+    function ensureRendered(idx) {
+      var a = activeSrc();
+      if (!a.ready) return;
+      var guard = 0;
+      while (state.rendered <= idx && state.rendered < a.lines.length && guard++ < 2000) appendChunk();
+    }
+
+    window.grefListScroll = function (el) {
+      try {
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 600) appendChunk();
+      } catch (e) {}
+    };
+
     function renderExplain() {
       var body = document.getElementById('gref-body');
-      var g = state.gfile;
-      var html = '<div class="gref-exwrap" style="display:flex;flex-direction:row;gap:12px;flex:1;min-height:0">';
+      var a = activeSrc();
+      state.rendered = 0;
+      var html = '<div class="gref-exwrap" id="gref-exwrap" style="display:flex;flex-direction:row;flex:1;min-height:0;min-width:0;max-width:100%">';
 
-      /* ---- left: the loaded G-code file ---- */
-      html += '<div style="flex:0 0 46%;display:flex;flex-direction:column;min-width:0;min-height:0;' +
+      /* ---- left: source pane (loaded file OR pasted code) ---- */
+      html += '<div id="gref-leftpane" style="flex:0 0 ' + state.splitPct + '%;display:flex;flex-direction:column;min-width:0;min-height:0;' +
               'border:1px solid var(--color-border,#333a45);border-radius:var(--radius-small,6px);overflow:hidden">';
-      if (g.status === 'ready') {
-        var n = g.lines.length;
+
+      // source toggle
+      function seg(src, label, active) {
+        return '<button onclick="grefSetSrc(&quot;' + src + '&quot;)" style="flex:1;padding:6px 0;font-size:0.75rem;' +
+               'cursor:pointer;border:none;border-radius:0;text-align:center;' +
+               (active ? 'background:var(--color-accent,#10b981);color:#fff;font-weight:600;'
+                       : 'background:transparent;color:var(--color-text-secondary,#9aa4b2);') + '">' + label + '</button>';
+      }
+      html += '<div style="display:flex;border-bottom:1px solid var(--color-border,#333a45)">' +
+              seg('file', 'Loaded file', state.src === 'file') +
+              seg('paste', 'Paste code', state.src === 'paste') + '</div>';
+
+      var isPaste = state.src === 'paste';
+      var g = state.gfile;
+
+      if (!isPaste && (g.status === 'loading' || g.status === 'idle')) {
+        html += '<div class="gref-empty" style="padding:20px">Loading the current G-code file&hellip;</div>';
+      } else if (!isPaste && g.status === 'none') {
+        html += '<div class="gref-empty" style="padding:20px">No G-code file is loaded in ncSender ' +
+                '(<a href="#" onclick="grefReloadFile();return false" style="color:var(--color-accent,#10b981);text-decoration:none">check again</a>).' +
+                '<br><br>Switch to <b>Paste code</b> above to explain arbitrary G-code.</div>';
+      } else {
+        var n = a.lines.length;
         var jv = state.gsel.from < 0 ? '' :
                  (state.gsel.from === state.gsel.to ? String(state.gsel.from + 1)
                   : (state.gsel.from + 1) + '-' + (state.gsel.to + 1));
+        // header: title | jump | of N lines | end | reload/clear
         html += '<div style="padding:6px 10px;font-size:0.75rem;color:var(--color-text-secondary,#9aa4b2);' +
                 'border-bottom:1px solid var(--color-border,#333a45);display:flex;gap:8px;align-items:center">' +
                 '<span id="gref-filename" style="color:var(--color-text-primary,#e8eaed);font-weight:600">' +
-                (g.name ? esc(g.name) : 'Loaded file') + '</span>' +
+                (isPaste ? 'Pasted code' : (g.name ? esc(g.name) : 'Loaded file')) + '</span>' +
                 '<input id="gref-jump" value="' + esc(jv) + '" placeholder="line #" ' +
                 'title="Type a line number (or a range like 120-135) and press Enter to jump" ' +
                 'onkeydown="if(event.key===&quot;Enter&quot;){grefJump(this.value);}" onchange="grefJump(this.value)" ' +
                 'style="width:84px;padding:2px 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.74rem;' +
                 'background:var(--color-surface,#1a2027);color:var(--color-text-primary,#e8eaed);' +
                 'border:1px solid var(--color-border,#333a45);border-radius:4px;text-align:center">' +
-                '<span>of ' + n + ' lines</span><span style="flex:1"></span>' +
-                '<a href="#" onclick="grefReloadFile();return false" style="color:var(--color-accent,#10b981);text-decoration:none">reload</a></div>';
+                '<span>of <span id="gref-linecount">' + n + '</span> lines</span>' +
+                '<a href="#" onclick="grefJumpEnd();return false" title="Jump to the last line" ' +
+                'style="color:var(--color-accent,#10b981);text-decoration:none">end &#8595;</a>' +
+                '<span style="flex:1"></span>' +
+                (isPaste
+                  ? '<a href="#" onclick="grefPasteClear();return false" style="color:var(--color-accent,#10b981);text-decoration:none">clear</a>'
+                  : '<a href="#" onclick="grefReloadFile();return false" style="color:var(--color-accent,#10b981);text-decoration:none">reload</a>') +
+                '</div>';
+        // paste editor
+        if (isPaste) {
+          html += '<textarea id="gref-paste" spellcheck="false" oninput="grefPasteInput(this.value)" ' +
+                  'placeholder="Paste one or more lines of G-code, e.g.&#10;G90 G21 G17&#10;G1 X10 Y5 F500&#10;M4 S800" ' +
+                  'style="flex:0 0 auto;height:92px;margin:8px 8px 0;padding:6px 8px;resize:vertical;' +
+                  'font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.76rem;' +
+                  'background:var(--color-surface,#1a2027);color:var(--color-text-primary,#e8eaed);' +
+                  'border:1px solid var(--color-border,#333a45);border-radius:4px">' + esc(state.paste.text) + '</textarea>';
+        }
+        // search row
         var fbtn = 'background:transparent;border:1px solid var(--color-border,#333a45);' +
                    'color:var(--color-text-secondary,#9aa4b2);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;';
         html += '<div style="display:flex;gap:6px;align-items:center;padding:6px 8px;' +
                 'border-bottom:1px solid var(--color-border,#333a45)">' +
-                '<input id="gref-fsearch" placeholder="Find in file&hellip;" value="' + esc(state.fsearch.q) + '" ' +
+                '<input id="gref-fsearch" placeholder="Find&hellip;" value="' + esc(state.fsearch.q) + '" ' +
                 'oninput="grefFileSearch(this.value)" ' +
                 'onkeydown="if(event.key===&quot;Enter&quot;){grefFileFind(event.shiftKey?-1:1);}" ' +
                 'style="flex:1;min-width:0;padding:3px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.76rem;' +
@@ -768,33 +919,26 @@
                 '</div>';
         html += '<div style="padding:5px 10px;font-size:0.72rem;color:var(--color-text-secondary,#9aa4b2);' +
                 'border-bottom:1px solid var(--color-border,#333a45)">Click a line to explain it &middot; Shift+click to explain a range</div>';
-        html += '<div id="gref-filelist" style="flex:1;overflow-y:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.78rem;line-height:1.45">';
-        var shown = Math.min(n, MAX_FILE_ROWS);
-        var numW = String(shown).length;
-        for (var i = 0; i < shown; i++) {
-          var selected = i >= state.gsel.from && i <= state.gsel.to;
-          html += '<div data-i="' + i + '" onclick="grefLineClick(event,' + i + ')" style="' + fileRowStyle(selected) + '">' +
-                  '<span style="color:var(--color-text-secondary,#9aa4b2);min-width:' + numW + 'ch;text-align:right;user-select:none">' + (i + 1) + '</span>' +
-                  '<span style="white-space:pre;overflow:hidden;text-overflow:ellipsis">' + (g.lines[i] ? hlGcode(g.lines[i]) : '&nbsp;') + '</span></div>';
-        }
-        if (n > MAX_FILE_ROWS) {
-          html += '<div style="padding:6px 10px;color:var(--color-text-secondary,#9aa4b2);font-size:0.72rem">Showing the first ' +
-                  MAX_FILE_ROWS + ' of ' + n + ' lines.</div>';
+        // the list itself: first chunk now, more on scroll / jump / search
+        html += '<div id="gref-filelist" onscroll="grefListScroll(this)" ' +
+                'style="flex:1;overflow-y:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.78rem;line-height:1.45">';
+        if (n === 0) {
+          html += '<div class="gref-empty" style="padding:16px">Paste G-code above to browse and explain it.</div>';
+        } else {
+          var first = Math.min(n, CHUNK_ROWS);
+          html += buildRows(a.lines, 0, first, String(n).length);
         }
         html += '</div>';
-      } else if (g.status === 'loading' || g.status === 'idle') {
-        html += '<div class="gref-empty" style="padding:20px">Loading the current G-code file&hellip;</div>';
-      } else {
-        // no file loaded: fall back to paste-in
-        html += '<div style="display:flex;flex-direction:column;flex:1;padding:10px;gap:8px;min-height:0">';
-        html += '<div style="font-size:0.78rem;color:var(--color-text-secondary,#9aa4b2)">No G-code file is loaded in ncSender ' +
-                '(<a href="#" onclick="grefReloadFile();return false" style="color:var(--color-accent,#10b981);text-decoration:none">check again</a>). ' +
-                'You can paste lines here instead:</div>';
-        html += '<textarea class="gref-exinput" id="gref-exinput" style="flex:1;min-height:120px" placeholder="Paste one or more lines of G-code, e.g.&#10;G90 G21 G17&#10;G1 X10 Y5 F500&#10;M4 S800" spellcheck="false">' + esc(state.explainText) + '</textarea>';
-        html += '<button class="gref-btn" onclick="grefRunExplain()" style="align-self:flex-start">Explain</button>';
-        html += '</div>';
+        html += '<div id="gref-rendernote" style="display:none;padding:4px 10px;font-size:0.7rem;' +
+                'color:var(--color-text-secondary,#9aa4b2);border-top:1px solid var(--color-border,#333a45)"></div>';
+        if (n > 0) state.rendered = Math.min(n, CHUNK_ROWS);
       }
       html += '</div>';
+
+      /* ---- draggable divider ---- */
+      html += '<div onmousedown="grefSplitStart(event)" title="Drag to resize the panes" ' +
+              'style="flex:0 0 6px;cursor:col-resize;align-self:stretch;margin:0 3px;border-radius:3px;' +
+              'background:var(--color-border,#333a45)"></div>';
 
       /* ---- right: the word-by-word breakdown ---- */
       html += '<div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;' +
@@ -805,12 +949,13 @@
       html += '<div id="gref-exout" style="flex:1;overflow-y:auto;min-width:0;padding:8px">';
       html += state.explainText.trim()
         ? renderExplainOutput(state.explainText, exStartLine())
-        : '<div class="gref-empty">' + (g.status === 'ready'
+        : '<div class="gref-empty">' + (a.ready
             ? 'Select a line on the left to see it explained word by word.'
             : 'Explanations appear here.') + '</div>';
       html += '</div></div></div>';
       body.innerHTML = html;
-      if (state.gfile.status === 'idle') loadGcodeFile();
+      updateRenderNote();
+      if (state.src === 'file' && state.gfile.status === 'idle') loadGcodeFile();
     }
 
     function renderExplainOutput(text, startLine) {
@@ -821,17 +966,34 @@
       lines.forEach(function (line, li) {
         if (!line.trim()) return;
         var wordsArr = explainLine(line);
+        var invalidCount = 0, commandCount = 0;
+        wordsArr.forEach(function (w) {
+          if (w.kind === 'invalid') invalidCount++;
+          if (w.kind === 'command') commandCount++;
+        });
         var fileIdx = startLine === null || startLine === undefined ? null : startLine + li;
         var numHtml = fileIdx === null ? '' :
           '<span style="color:var(--color-text-secondary,#9aa4b2);font-weight:400;margin-right:10px;user-select:none">' + (fileIdx + 1) + '</span>';
         var attrs = fileIdx === null ? '' :
           ' data-line="' + fileIdx + '" onclick="grefExFocus(' + fileIdx + ', this)" style="cursor:pointer"' +
           ' title="Click to locate line ' + (fileIdx + 1) + ' in the file"';
-        out += '<div class="gref-exline"' + attrs + '><div class="gref-exline-src">' + numHtml + hlGcode(line.trim()) + '</div><div class="gref-exline-words">';
+        out += '<div class="gref-exline"' + attrs + '><div class="gref-exline-src">' + numHtml + hlGcode(line.trim()) + '</div>';
+        if (invalidCount > 0) {
+          var warnColor = IS_LIGHT ? '#9a6700' : '#e3b341';
+          out += '<div style="display:flex;gap:8px;align-items:center;padding:5px 10px;font-size:0.76rem;' +
+                 'color:' + warnColor + ';border-left:3px solid ' + warnColor + ';margin:4px 0;' +
+                 'background:rgba(227,179,65,0.08)">&#9888; ' +
+                 (commandCount === 0
+                   ? 'This line does not appear to be G-code'
+                   : 'Parts of this line are not valid G-code') +
+                 ' &mdash; unrecognized text is marked in red below.</div>';
+        }
+        out += '<div class="gref-exline-words">';
         wordsArr.forEach(function (w) {
           out += '<div class="gref-word ' + esc(w.kind) + '">';
           var tk = gcodeTokenKind(w.tok);
           var tokStyle = tk ? ' style="color:#' + GCODE_COLORS[tk].c + (GCODE_COLORS[tk].b ? ';font-weight:600' : '') + '"' : '';
+          if (w.kind === 'invalid') tokStyle = ' style="color:' + (IS_LIGHT ? '#c62839' : '#ff6b81') + '"';
           out += '<span class="gref-word-tok"' + tokStyle + '>' + esc(w.tok) + '</span>';
           out += '<span class="gref-word-desc">' + esc(w.desc);
           if (w.sub) out += '<br><span class="sub">' + esc(w.sub) + '</span>';
@@ -900,6 +1062,28 @@
 
     var MANUAL_URL = 'https://siganberg.github.io/ncSender.manual/';
 
+    var CHIP_CAP_PX = 0; // measured two-row chip width; 0 = CSS fallback
+
+    function applyTabWidth() {
+      // Per-tab width: Explain stretches to 1800px since G-code lines use
+      // every pixel. NC Manual caps at 1260px - the manual is Material for
+      // MkDocs, whose content grid maxes out at 61rem (~976px) and whose
+      // sidebars+TOC layout completes at the 1220px breakpoint, so anything
+      // wider is centered dead margin. Reference/Settings keep the
+      // chip-fitted two-row cap.
+      try {
+        var root = document.getElementById('gref-root');
+        if (!root) return;
+        if (state.tab === 'explain') {
+          root.style.maxWidth = '1800px';
+        } else if (state.tab === 'manual') {
+          root.style.maxWidth = '1260px';
+        } else {
+          root.style.maxWidth = CHIP_CAP_PX ? CHIP_CAP_PX + 'px' : '';
+        }
+      } catch (e) {}
+    }
+
     function renderTabs() {
       styleTab(document.getElementById('gref-tab-reference'), state.tab === 'reference');
       styleTab(document.getElementById('gref-tab-explain'), state.tab === 'explain');
@@ -910,6 +1094,7 @@
 
     function render() {
       renderTabs();
+      applyTabWidth();
       var body = document.getElementById('gref-body');
       var slot = document.getElementById('gref-settings');
       var manual = document.getElementById('gref-manual');
@@ -931,12 +1116,16 @@
       if (state.tab === 'reference') {
         // reference: the body itself scrolls the card list
         body.style.overflowY = 'auto';
+        body.style.overflowX = '';
         renderChips(); renderReference();
       } else {
         // explain: the body is a fixed flex frame; the file list and the
-        // explanation pane each scroll independently inside it
+        // explanation pane each scroll independently inside it, and
+        // horizontal overflow is clipped so no content can ever push
+        // the dialog wider than its frame
         body.style.display = 'flex';
         body.style.overflowY = 'hidden';
+        body.style.overflowX = 'hidden';
         renderExplain();
       }
     }
@@ -949,11 +1138,6 @@
       var code = card.getAttribute('data-code');
       state.open[code] = !state.open[code];
       card.classList.toggle('open');
-    };
-    window.grefRunExplain = function () {
-      var ta = document.getElementById('gref-exinput');
-      state.explainText = ta.value;
-      document.getElementById('gref-exout').innerHTML = renderExplainOutput(state.explainText);
     };
     function scrollToLine(idx) {
       try {
@@ -968,9 +1152,10 @@
       state.gfocus = -1;
       var s = state.gsel;
       s.anchor = from; s.from = from; s.to = (to === undefined ? from : to);
+      ensureRendered(s.from);
       applySelectionHighlights();
       scrollToLine(s.from);
-      state.explainText = state.gfile.lines.slice(s.from, s.to + 1).join('\n');
+      state.explainText = activeSrc().lines.slice(s.from, s.to + 1).join('\n');
       updateExout();
     }
 
@@ -988,7 +1173,7 @@
       f.matches = [];
       if (q) {
         var needle = q.toLowerCase();
-        var lines = state.gfile.lines;
+        var lines = activeSrc().lines;
         for (var i = 0; i < lines.length; i++) {
           if (lines[i].toLowerCase().indexOf(needle) !== -1) f.matches.push(i);
         }
@@ -1021,28 +1206,91 @@
         s.anchor = i; s.from = i; s.to = i;
       }
       applySelectionHighlights();
-      state.explainText = state.gfile.lines.slice(s.from, s.to + 1).join('\n');
+      state.explainText = activeSrc().lines.slice(s.from, s.to + 1).join('\n');
       updateExout();
     };
     window.grefJump = function (val) {
       state.gfocus = -1;
       var m = String(val).trim().match(/^(\d+)(?:\s*[-\u2013]\s*(\d+))?$/);
-      if (!m || state.gfile.status !== 'ready') return;
-      var n = state.gfile.lines.length;
+      var src = activeSrc();
+      if (!m || !src.ready) return;
+      var n = src.lines.length;
       var a = Math.max(1, Math.min(n, parseInt(m[1], 10))) - 1;
       var b = m[2] ? Math.max(1, Math.min(n, parseInt(m[2], 10))) - 1 : a;
       var s = state.gsel;
       s.anchor = Math.min(a, b); s.from = Math.min(a, b); s.to = Math.max(a, b);
+      ensureRendered(s.to);
       applySelectionHighlights();
-      // scroll the file list to the jumped-to line
-      try {
-        var list = document.getElementById('gref-filelist');
-        if (list && list.children && list.children[s.from] && list.children[s.from].scrollIntoView) {
-          list.children[s.from].scrollIntoView({ block: 'center' });
-        }
-      } catch (e) {}
-      state.explainText = state.gfile.lines.slice(s.from, s.to + 1).join('\n');
+      scrollToLine(s.from);
+      state.explainText = src.lines.slice(s.from, s.to + 1).join('\n');
       updateExout();
+    };
+    window.grefJumpEnd = function () {
+      var src = activeSrc();
+      if (src.ready) window.grefJump(String(src.lines.length));
+    };
+    window.grefSetSrc = function (src) {
+      if (state.src === src) return;
+      state.src = src;
+      state.gsel = { anchor: -1, from: -1, to: -1 };
+      state.gfocus = -1;
+      state.fsearch = { q: '', matches: [], cur: -1 };
+      state.explainText = '';
+      renderExplain();
+    };
+    window.grefPasteInput = function (v) {
+      state.paste.text = v;
+      state.paste.lines = v ? v.split(/\r?\n/) : [];
+      state.gfocus = -1;
+      state.fsearch.matches = []; state.fsearch.cur = -1;
+      var n = state.paste.lines.length;
+      var lc = document.getElementById('gref-linecount');
+      if (lc) lc.innerHTML = String(n);
+      var list = document.getElementById('gref-filelist');
+      if (list) {
+        list.innerHTML = n ? '' : '<div class="gref-empty" style="padding:16px">Paste G-code above to browse and explain it.</div>';
+        state.rendered = 0;
+        if (n) appendChunk();
+      }
+      fsearchCount();
+      if (n) {
+        // explain the whole paste right away (output caps at 300 lines)
+        state.gsel = { anchor: 0, from: 0, to: n - 1 };
+        applySelectionHighlights();
+        state.explainText = state.paste.text;
+        updateExout();
+      } else {
+        state.gsel = { anchor: -1, from: -1, to: -1 };
+        state.explainText = '';
+        updateExout();
+      }
+    };
+    window.grefSplitStart = function (ev) {
+      try {
+        var wrap = document.getElementById('gref-exwrap');
+        var left = document.getElementById('gref-leftpane');
+        if (!wrap || !left || typeof wrap.getBoundingClientRect !== 'function' ||
+            typeof document.addEventListener !== 'function') return;
+        var rect = wrap.getBoundingClientRect();
+        var move = function (e) {
+          var pct = ((e.clientX - rect.left) / rect.width) * 100;
+          pct = Math.max(20, Math.min(78, pct));
+          state.splitPct = pct;
+          left.style.flex = '0 0 ' + pct + '%';
+        };
+        var up = function () {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        if (ev && ev.preventDefault) ev.preventDefault();
+      } catch (e) {}
+    };
+    window.grefPasteClear = function () {
+      var ta = document.getElementById('gref-paste');
+      if (ta) ta.value = '';
+      window.grefPasteInput('');
     };
     window.grefReloadFile = function () {
       state.gfile = { status: 'idle', name: '', lines: [] };
@@ -1115,7 +1363,8 @@
         w += 48;     // container horizontal padding + scrollbar allowance
         var px = Math.ceil(w);
         if (px > 500 && px < 2200) {
-          document.getElementById('gref-root').style.maxWidth = px + 'px';
+          CHIP_CAP_PX = px;
+          applyTabWidth();
         }
       } catch (e) { /* keep the CSS fallback */ }
     })();
