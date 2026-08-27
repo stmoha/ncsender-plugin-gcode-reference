@@ -1,7 +1,7 @@
 {
   "id": "com.cncdocs.gcode-reference",
-  "name": "G-code & grblHAL Reference",
-  "version": "1.18.4",
+  "name": "G-code Explorer",
+  "version": "2.0.0",
   "minAppVersion": "0.3.111",
   "platforms": {
     "v1": "0.3.111",
@@ -9,7 +9,7 @@
     "pro-v2": "2.0.0"
   },
   "author": "Stefan",
-  "description": "Inline G-code, M-code and grblHAL settings documentation. Type ?keyword in the Console to look up commands, ??<line> to explain a line word by word, or browse the full reference from the Tools menu.",
+  "description": "G-code reference, line explainer, and toolpath navigator in one. Type ?keyword in the Console to look up any G/M-code or grblHAL setting, ??<line> to explain a line word by word, browse the docs and NC manual, or open the Navigator to snap to G-code lines on a 2D map, jog the machine, trace the cut outline, and unwrap 4th-axis jobs.",
   "repository": "https://github.com/stmoha/ncsender-plugin-gcode-reference",
   "category": "utility",
   "icon": "icon.png",
@@ -25,8 +25,14 @@
   ],
   "toolMenu": [
     {
-      "id": "open-reference",
-      "label": "G-code Reference",
+      "id": "open-explorer",
+      "label": "G-code Explorer",
+      "icon": "icon.png",
+      "clientOnly": true
+    },
+    {
+      "id": "open-navigator",
+      "label": "G-code Navigator",
       "icon": "icon.png",
       "clientOnly": true
     }

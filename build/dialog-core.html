@@ -121,6 +121,10 @@
       <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
       <span>Explain a line</span>
     </button>
+    <button class="gref-tab" id="gref-tab-navigator" onclick="grefSwitchTab('navigator')">
+      <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span>
+      <span>Navigator</span>
+    </button>
     <button class="gref-tab" id="gref-tab-manual" onclick="grefSwitchTab('manual')">
       <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
       <span>NC Manual</span>
@@ -192,6 +196,7 @@
   </div>
 
   <div class="gref-body" id="gref-body"></div>
+  <div id="gn-host" style="display:none;flex:1;min-height:0;min-width:0;overflow:hidden"></div>
 
   <div class="gref-foot">
     Terminal shortcuts: <code>?keyword</code> looks up docs (e.g. <code>?dwell</code>, <code>?$110</code>) &nbsp;&middot;&nbsp;
@@ -1062,6 +1067,34 @@
 
     var MANUAL_URL = 'https://siganberg.github.io/ncSender.manual/';
 
+    // ---- G-code Navigator pane (merged plugin) ----
+    // NAV_MARKUP / NAV_SCRIPT are injected by the build from
+    // build/navigator-panel.html. The navigator renders ONCE into #gn-host
+    // on first tab activation and persists (hidden) across tab switches so
+    // traced contours / analysis state survive. Its script is one strict
+    // IIFE with gn-prefixed ids and --gn-* CSS vars, so it coexists with
+    // the reference dialog without collisions.
+    var NAV_MARKUP = '__NAV_MARKUP__';
+    var NAV_SCRIPT = '__NAV_SCRIPT__';
+    var gnBooted = false;
+    function gnActivate(host) {
+      try {
+        if (!gnBooted) {
+          gnBooted = true;
+          host.innerHTML = NAV_MARKUP;
+          var sc = document.createElement('script');
+          sc.textContent = NAV_SCRIPT;
+          (document.body || host).appendChild(sc);
+        }
+        // canvas measures itself against a visible container
+        if (typeof window.dispatchEvent === 'function' && typeof Event === 'function') {
+          setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }, 30);
+        }
+      } catch (e) {
+        try { if (typeof console !== 'undefined' && console.log) console.log('[gcode-explorer] navigator activation failed:', e && e.message); } catch (e2) {}
+      }
+    }
+
     var CHIP_CAP_PX = 0; // measured two-row chip width; 0 = CSS fallback
 
     function applyTabWidth() {
@@ -1074,7 +1107,7 @@
       try {
         var root = document.getElementById('gref-root');
         if (!root) return;
-        if (state.tab === 'explain') {
+        if (state.tab === 'explain' || state.tab === 'navigator') {
           root.style.maxWidth = '1800px';
         } else if (state.tab === 'manual') {
           root.style.maxWidth = '1260px';
@@ -1098,11 +1131,20 @@
       var body = document.getElementById('gref-body');
       var slot = document.getElementById('gref-settings');
       var manual = document.getElementById('gref-manual');
+      var nav = document.getElementById('gn-host');
       body.style.display = 'none';
       slot.style.display = 'none';
       manual.style.display = 'none';
+      if (nav) nav.style.display = 'none';
       if (state.tab === 'settings') {
         slot.style.display = 'block';
+        return;
+      }
+      if (state.tab === 'navigator') {
+        if (nav) {
+          nav.style.display = 'flex';
+          gnActivate(nav);
+        }
         return;
       }
       if (state.tab === 'manual') {

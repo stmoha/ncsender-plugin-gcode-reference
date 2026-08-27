@@ -2,7 +2,7 @@
      ncSender shows this file in two places:
        1. Settings > Plugins > configure  (inside an iframe; the
           __TOOL_MENU_LABEL__ token below is NOT replaced there)
-       2. Tools menu > "G-code Reference"  (as a dialog; the server
+       2. Tools menu > "G-code Explorer" (or "G-code Navigator")  (as a dialog; the server
           replaces the token)
      The full UI - Reference, Explain a line, and Settings tabs
      (terminal-lookup options + About/sources) - lives in the shared
@@ -18,7 +18,10 @@
     var TML = '__TOOL_MENU_LABEL__';
     var IS_DIALOG = TML !== ('__TOOL' + '_MENU_LABEL__');
     // The Settings > Plugins page exists to configure, so land on the
-    // Settings tab there; the Tools-menu dialog lands on Reference.
+    // Settings tab there. The Tools-menu dialog lands on the tab matching
+    // the menu entry that was clicked: "G-code Navigator" opens the
+    // Navigator, anything else opens the Reference.
     if (!IS_DIALOG && window.grefSwitchTab) window.grefSwitchTab('settings');
+    else if (IS_DIALOG && /navigator/i.test(TML) && window.grefSwitchTab) window.grefSwitchTab('navigator');
   })();
 </script>

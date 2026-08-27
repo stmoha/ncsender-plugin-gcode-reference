@@ -84,18 +84,18 @@ function onBeforeCommand(commands, context, settings) {
 
       var title, html;
       if (isBlank) {
-        title = 'G-code Reference';
+        title = 'G-code Explorer';
         html = buildDialogHTML({
           initialTab: 'reference'
         });
       } else if (explainMatch) {
-        title = 'G-code Reference - Explain';
+        title = 'G-code Explorer - Explain';
         html = buildDialogHTML({
           initialTab: 'explain',
           initialExplain: explainMatch[1]
         });
       } else {
-        title = 'G-code Reference';
+        title = 'G-code Explorer';
         html = buildDialogHTML({
           initialTab: 'reference',
           initialQuery: lookupMatch[1]

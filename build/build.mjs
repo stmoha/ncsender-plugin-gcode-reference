@@ -14,7 +14,30 @@ import { fileURLToPath } from 'url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const db = await import(join(root, 'gcode-database.js'));
 
-const dialogCore = readFileSync(join(root, 'build/dialog-core.html'), 'utf8');
+let dialogCore = readFileSync(join(root, 'build/dialog-core.html'), 'utf8');
+
+// ---- merge the G-code Navigator panel (build/navigator-panel.html) ----
+// The panel is a self-contained fragment: <style> + markup + one <script>
+// IIFE. Markup (incl. styles) and script are embedded as JSON strings and
+// injected lazily on first Navigator-tab activation (see gnActivate in
+// dialog-core). __SERVER_PORT__ is a last-resort fallback only (the host
+// bridge window.ncSender.getApiBaseUrl is preferred), so 8090 is safe.
+{
+  const panel = readFileSync(join(root, 'build/navigator-panel.html'), 'utf8');
+  const scriptOpen = panel.indexOf('<script>');
+  const scriptClose = panel.lastIndexOf('</' + 'script>');
+  if (scriptOpen < 0 || scriptClose < 0) throw new Error('navigator-panel.html: script block not found');
+  const navMarkup = panel.slice(0, scriptOpen);
+  const navScript = panel.slice(scriptOpen + '<script>'.length, scriptClose)
+    .replace('__SERVER_PORT__', '8090');
+  const markupJson = JSON.stringify(navMarkup).split('</').join('<\\/');
+  const scriptJson = JSON.stringify(navScript).split('</').join('<\\/');
+  if (!dialogCore.includes("'__NAV_MARKUP__'") || !dialogCore.includes("'__NAV_SCRIPT__'"))
+    throw new Error('dialog-core.html: NAV tokens missing');
+  dialogCore = dialogCore
+    .replace("'__NAV_MARKUP__'", markupJson)
+    .replace("'__NAV_SCRIPT__'", scriptJson);
+}
 const logic = readFileSync(join(root, 'build/commands-logic.js'), 'utf8');
 const configTemplate = readFileSync(join(root, 'build/config-template.html'), 'utf8');
 

@@ -1,0 +1,3425 @@
+<style>
+  :root {
+    --gn-bg: #1e1e1e;
+    --gn-panel: #252526;
+    --gn-border: #3c3c3c;
+    --gn-text: #d4d4d4;
+    --gn-accent: #569cd6;
+    --gn-rapid: #ff8c00;
+    --gn-feed: #4ec9b0;
+    --gn-hull: #c586c0;
+    --gn-danger: #f14c4c;
+    --gn-jobstart: #43a047;
+    /* gSender-style "already executed" gray for traced G-code */
+    --gn-traced: #8c8c8c;
+  }
+  body.theme-light {
+    --gn-bg: #f8f8f8;
+    --gn-panel: #ffffff;
+    --gn-border: #d0d0d0;
+    --gn-text: #1e1e1e;
+  }
+  /* The host plugin dialog (.plugin-dialog-container in PluginDialog.vue)
+     is width:auto — it sizes to its content, and the showDialog 'size'
+     option is not applied to plugin dialogs at all. So the plugin content
+     itself must declare the window size. 75vw wide; map height budgeted so
+     header + tabs + status + legend fit inside the host's 85vh max-height
+     without forcing the content scrollbar. */
+  #gn-root { font-family: -apple-system, Segoe UI, sans-serif; color: var(--gn-text); font-size: 13px; width: 96vw; max-width: 1760px; padding: 0 12px 10px; }
+  #gn-header-strip { display: flex; align-items: center; gap: 10px; min-height: 22px; margin: 2px 0 5px; }
+  #gn-root * { box-sizing: border-box; }
+  /* High-contrast selection color used for the selected vertex + list row */
+  :root { --gn-select: #ffd400; }
+  .gn-layout { position: relative; }
+  .gn-map-col { margin-right: 310px; min-width: 0; display: flex; flex-direction: column; }
+  /* The map column is the sole height authority. The controls column is
+     ABSOLUTELY positioned against the layout box (whose height comes only
+     from the in-flow map column), pinned top:0/bottom:0 — its edges track
+     the map exactly without contributing to layout height. (The previous
+     height:0 + stretch attempt failed: an explicit height disables
+     stretch, collapsing the column.) The map column reserves the width. */
+  .gn-controls-col {
+    position: absolute; top: 0; bottom: 0; right: 0; width: 296px;
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  /* Upper controls scroll; the JOG & ZERO box stays pinned and always
+     visible at the bottom of the column. */
+  .gn-controls-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; scrollbar-width: thin; }
+  .gn-controls-col > #gn-jog-box { flex: 0 0 auto; margin-top: 7px; margin-bottom: 0; }
+  .gn-map-wrap {
+    border: 1px solid var(--gn-border); border-radius: 4px; background: var(--gn-panel);
+    overflow: hidden; position: relative; flex: 1 1 auto;
+    /* 85vh host cap minus dialog header (~56px), the single header strip
+       (~27px), legend (~24px), root padding — the old separate status +
+       rotary rows are gone, so the map gets the reclaimed space. */
+    height: 67vh; min-height: 400px;
+  }
+  .gn-map-wrap svg {
+    display: block; width: 100%; height: 100%; cursor: crosshair;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+    /* Promote to its own compositing layer: fixes iPad Safari failing to
+       repaint the SVG during zoom/pan transform updates. */
+    transform: translateZ(0); will-change: transform;
+  }
+  .gn-fit-btn {
+    position: absolute; top: 8px; right: 8px; z-index: 2;
+    padding: 4px 10px; font-size: 11px; border-radius: 3px; cursor: pointer;
+    background: var(--gn-bg); color: var(--gn-text); border: 1px solid var(--gn-border); opacity: 0.85;
+  }
+  .gn-fit-btn:hover { border-color: var(--gn-accent); opacity: 1; }
+  .gn-zoom-hint {
+    position: absolute; bottom: 6px; left: 8px; z-index: 2; font-size: 10px; opacity: 0.55; pointer-events: none;
+  }
+  .gn-field { margin-bottom: 6px; }
+  .gn-field label { display: block; margin-bottom: 3px; opacity: 0.8; font-size: 12px; }
+  .gn-field input[type=number], .gn-field input[type=text] {
+    width: 100%; padding: 5px 7px; background: var(--gn-bg); color: var(--gn-text);
+    border: 1px solid var(--gn-border); border-radius: 3px;
+  }
+  .gn-row { display: flex; gap: 8px; }
+  .gn-row > * { flex: 1; }
+  .gn-btn {
+    padding: 6px 12px; border-radius: 3px; border: 1px solid var(--gn-border); cursor: pointer;
+    background: var(--gn-panel); color: var(--gn-text); font-size: 12px; width: 100%; margin-bottom: 5px;
+  }
+  .gn-btn:hover { border-color: var(--gn-accent); }
+  .gn-btn.primary { background: var(--gn-accent); color: #fff; border-color: var(--gn-accent); }
+  .gn-btn.danger { background: transparent; border-color: var(--gn-danger); color: var(--gn-danger); }
+  /* !important: the host plugin dialog applies its own teal styling to
+     button elements inside plugin content (same issue as the old tabs). */
+  .gn-btn.yellow { background: var(--gn-select) !important; border-color: var(--gn-select) !important; color: #1e1e1e !important; font-weight: 600; }
+  .gn-btn.pink { background: var(--gn-hull) !important; border-color: var(--gn-hull) !important; color: #1e1e1e !important; font-weight: 600; }
+  .gn-analysis-row {
+    font-size: 12px; font-family: Consolas, monospace; padding: 2px 0;
+    user-select: text !important; -webkit-user-select: text !important;
+  }
+  /* Click-to-copy chips: hover makes the affordance obvious, click copies. */
+  .gn-copy {
+    cursor: copy; padding: 1px 4px; border-radius: 4px;
+    border-bottom: 1px dashed rgba(255,255,255,0.35);
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .gn-copy:hover { background: rgba(86,156,214,0.28); border-bottom-color: var(--gn-accent); }
+  .gn-copy.copied { background: rgba(53,196,143,0.4); border-bottom-color: #35c48f; }
+  .gn-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gn-panel-box {
+    border: 1px solid var(--gn-border); border-radius: 4px; padding: 8px; margin-bottom: 7px; background: var(--gn-panel);
+  }
+  .gn-mono { font-family: Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
+  .gn-note { font-size: 11px; opacity: 0.75; margin-top: 4px; }
+  .gn-warn { color: #dcbf3c; font-size: 11px; margin-top: 4px; }
+  .gn-error { color: var(--gn-danger); font-size: 12px; margin-top: 6px; }
+  .gn-legend { display: flex; gap: 14px; font-size: 11px; margin-top: 6px; opacity: 0.85; flex: 0 0 auto; }
+  .gn-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .gn-legend-item { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 4px; padding: 1px 4px; }
+  .gn-legend-item:hover { background: rgba(255,255,255,0.08); }
+  .gn-legend-item.gn-layer-off { opacity: 0.32; text-decoration: line-through; }
+  .gn-progress { height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
+  .gn-progress-fill { height: 100%; width: 0%; background: var(--gn-hull); border-radius: 3px; transition: width 0.25s ease; }
+  /* Jog cluster styled after ncSender's own jog widget: dark gray rounded
+     buttons on black, red stop square, teal only on the ACTIVE step pill
+     and the "Hold" sublabels. Every colour is !important because the host
+     plugin dialog applies its own teal styling to button elements inside
+     plugin content (same bleed as .gn-btn.yellow/.pink). Layout: one
+     shared 4-column rhythm so pills, pad, Z column, and zero buttons all
+     share widths and margins. */
+  .gn-view-tab {
+    border: none !important; background: #262b36 !important; color: #aeb4bf !important;
+    border-radius: 8px 8px 0 0 !important; padding: 6px 14px !important; cursor: pointer;
+    font-size: 12px; box-shadow: none !important;
+  }
+  .gn-view-tab:hover { background: #2f3542 !important; }
+  .gn-view-tab.gn-tab-active { background: #2fc49b !important; color: #0d2a23 !important; font-weight: 700; }
+  .gn-jog-cluster { width: fit-content; margin: 0 auto; display: flex; flex-direction: column; gap: 5px; }
+  .gn-jog-row { display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; }
+  .gn-jog-btn {
+    height: 40px;
+    border: none !important; background: #262b36 !important; color: #dfe3ea !important;
+    border-radius: 10px !important; cursor: pointer; font-size: 13px; font-weight: 600;
+    padding: 0 !important; touch-action: none; user-select: none; -webkit-user-select: none;
+    box-shadow: none !important;
+  }
+  .gn-jog-btn:hover { background: #2f3542 !important; }
+  .gn-jog-btn:active, .gn-jog-btn.gn-jogging { background: #3a4252 !important; }
+  .gn-jog-stop { background: #d84b4b !important; color: #fff !important; font-size: 15px; }
+  .gn-jog-stop:hover { background: #e35c5c !important; }
+  .gn-step-pill {
+    height: 28px; border: none !important; background: #262b36 !important; color: #aeb4bf !important;
+    border-radius: 999px !important; cursor: pointer; font-size: 12px; padding: 0 !important;
+    touch-action: none; user-select: none; -webkit-user-select: none; box-shadow: none !important;
+  }
+  .gn-step-pill:hover { background: #2f3542 !important; }
+  .gn-step-pill.gn-step-active { background: #2fc49b !important; color: #0d2a23 !important; font-weight: 700; }
+  .gn-feed-select {
+    background: #262b36 !important; color: #dfe3ea !important; border: 1px solid #3a4252 !important;
+    border-radius: 8px !important; padding: 4px 6px; font-size: 12px;
+  }
+  .gn-zero-row .gn-hold-zero { grid-column: span 2; }
+  .gn-hold-zero {
+    border: none !important; background: #262b36 !important; color: #dfe3ea !important;
+    border-radius: 10px !important; cursor: pointer; padding: 5px 0 4px !important;
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    touch-action: none; user-select: none; -webkit-user-select: none; box-shadow: none !important;
+  }
+  .gn-hold-zero:hover { background: #2f3542 !important; }
+  .gn-zero-label { font-size: 13px; font-weight: 700; position: relative; z-index: 1; }
+  .gn-zero-sub { font-size: 10px; color: #2fc49b; font-weight: 600; position: relative; z-index: 1; }
+  .gn-hold-zero::before {
+    content: ''; position: absolute; inset: 0; background: rgba(47,196,155,0.35);
+    transform: scaleX(0); transform-origin: left; z-index: 0;
+  }
+  .gn-hold-zero.gn-holding::before { transform: scaleX(1); transition: transform 0.7s linear; }
+  .gn-hold-zero.gn-zeroed { background: #2fc49b !important; }
+  .gn-hold-zero.gn-zeroed .gn-zero-label, .gn-hold-zero.gn-zeroed .gn-zero-sub { color: #0d2a23; }
+  .gn-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .gn-checkbox-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  /* Custom context menu (native menus are suppressed app-wide by ncSender,
+     matching its own TransformContextMenu pattern) */
+  #gn-ctx-menu {
+    position: fixed; z-index: 99999; display: none; min-width: 190px;
+    background: var(--gn-panel); border: 1px solid var(--gn-border);
+    border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  }
+  #gn-ctx-menu .gn-ctx-item {
+    padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12.5px;
+    color: var(--gn-text); white-space: nowrap;
+  }
+  #gn-ctx-menu .gn-ctx-item:hover { background: rgba(86,156,214,0.18); }
+  /* Styled confirmation card, matching ncSender's own Trace Outline dialog
+     (dark rounded card, orange primary action) instead of window.confirm. */
+  #gn-confirm-overlay {
+    position: fixed; inset: 0; z-index: 100000; display: none;
+    background: rgba(0,0,0,0.45); align-items: center; justify-content: center;
+  }
+  #gn-confirm-card {
+    background: var(--gn-panel); border: 1px solid var(--gn-border);
+    border-radius: 14px; padding: 20px 22px; max-width: 440px; width: 90%;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  }
+  #gn-confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+  #gn-confirm-body { font-size: 13px; line-height: 1.5; }
+  #gn-confirm-body .gn-note { margin-top: 10px; }
+  .gn-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .gn-confirm-btns .gn-btn { width: auto; margin: 0; padding: 9px 22px; border-radius: 8px; }
+  .gn-btn.orange { background: #f0a030 !important; border-color: #f0a030 !important; color: #1e1e1e !important; font-weight: 700; }
+  #gn-ctx-menu .gn-ctx-coords {
+    padding: 6px 12px 4px; font-size: 11px; opacity: 0.6;
+    border-bottom: 1px solid var(--gn-border); margin-bottom: 3px;
+    font-family: Consolas, monospace;
+  }
+</style>
+
+<div id="gn-root">
+  <div id="gn-header-strip">
+    <span id="gn-status" class="gn-note" style="margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; min-width:0;"></span>
+    <span id="gn-view-tabs" style="display:none; align-items:center; gap:6px; flex:0 0 auto;">
+      <span id="gn-rotary-badge" style="font-size:12px; font-weight:700; color:#2fc49b;" title="A-axis motion detected in this file &mdash; rendering as unwrapped X&ndash;A instead of flat XY">&#8635; Rotary (A-axis)</span>
+      <span id="gn-rotary-dia-wrap" style="display:inline-flex; align-items:center; gap:4px; margin-left:6px;">
+        <span style="font-size:12px; opacity:0.85;" title="Stock diameter: scales A degrees to true surface distance so the unwrapped view has real proportions. Leave 0 to plot raw degrees.">&Oslash; stock (mm)</span>
+        <input type="number" id="gn-rotary-dia" min="0" step="1" value="0" style="width:60px;" />
+      </span>
+    </span>
+  </div>
+
+  <div class="gn-layout">
+    <div class="gn-map-col">
+      <div class="gn-map-wrap">
+        <button class="gn-fit-btn" id="gn-line-fit">&#8689; Fit</button>
+        <div class="gn-zoom-hint">scroll / pinch = zoom &middot; drag = pan &middot; drag marker = creep &middot; click = select &middot; hold-click / right-click = set point &middot; touch long-press = menu</div>
+        <svg id="gn-line-svg"></svg>
+      </div>
+      <div class="gn-legend" id="gn-legend">
+        <span class="gn-legend-item" data-layer="rapid" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-rapid)"></i>Rapid (G0)</span>
+        <span class="gn-legend-item" data-layer="feed" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-feed)"></i>Feed (G1/2/3)</span>
+        <span class="gn-legend-item" data-layer="selline" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-accent)"></i>Selected line</span>
+        <span class="gn-legend-item" data-layer="contour" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-hull)"></i>Outer contour</span>
+        <span class="gn-legend-item" data-layer="jobstart" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-jobstart)"></i>Job start</span>
+        <span class="gn-legend-item" data-layer="jobend" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-danger)"></i>Job end</span>
+        <span class="gn-legend-item" data-layer="selpoint" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-select)"></i>Selected point</span>
+        <span class="gn-legend-item" data-layer="spindle" title="Click to hide/show this layer"><i class="gn-swatch" style="background:rgba(255,255,255,0.75)"></i>Spindle</span>
+        <span class="gn-legend-item" data-layer="moves" id="gn-moves-item" style="display:none;" title="Hairline overlay of every move on top of the power shading, so lines stay visible and clickable"><i class="gn-swatch" style="background:#c8d2dc"></i>Moves</span>
+        <span id="gn-power-note" style="display:none; font-size:11px; opacity:0.75; margin-left:4px;" title="Feed lines are shaded by commanded S: faint/invisible = laser off or low power, solid = full power">&#9673;&nbsp;shaded by power (S)</span>
+        <span id="gn-depth-note" style="display:none; font-size:11px; opacity:0.75; margin-left:4px;" title="Feed lines are tinted by Z depth: lighter = shallower pass, darker = deeper pass">&#9673;&nbsp;tinted by depth (Z)</span>
+      </div>
+    </div>
+    <div class="gn-controls-col">
+      <div class="gn-controls-scroll">
+      <div class="gn-panel-box">
+        <div class="gn-field">
+          <label>Line to check (selects it on the map)</label>
+          <input type="number" id="gn-line-input" min="1" value="1" />
+        </div>
+        <div id="gn-analysis-box" style="display:none; margin-top:8px;">
+          <div class="gn-note" style="margin-bottom:4px;">LINE ANALYSIS:</div>
+          <div class="gn-analysis-row" id="gn-an-gcode"></div>
+          <div class="gn-analysis-row" id="gn-an-start"></div>
+          <div class="gn-analysis-row" id="gn-an-point"></div>
+          <div class="gn-analysis-row" id="gn-an-end"></div>
+        </div>
+        <button class="gn-btn" id="gn-sfl-btn" style="margin-top:8px; background:#7a5a1e; border-color:#8a6a2e;" title="Start the loaded job from the selected line using ncSender's resume engine: safe-Z retract, tool check, XY pre-position, spindle spin-up, approach + controlled plunge. You review the sequence before anything moves.">Start From Line&hellip;</button>
+        <div id="gn-sfl-panel" style="display:none; margin-top:8px; border-top:1px solid var(--gn-border); padding-top:8px;">
+          <div class="gn-note" id="gn-sfl-title" style="margin-bottom:4px;">RESUME FROM LINE</div>
+          <div id="gn-sfl-warnings" style="font-size:11.5px; color:#e9c46a; margin-bottom:6px;"></div>
+          <div id="gn-sfl-toolwarn" style="display:none; font-size:11.5px; color:#e9a1a1; margin-bottom:6px;"></div>
+          <div class="gn-note" style="margin:0 0 2px;">Resume sequence the machine will run:</div>
+          <pre id="gn-sfl-seq" style="font-size:10.5px; line-height:1.35; background:#16181d; border:1px solid var(--gn-border); border-radius:4px; padding:6px; max-height:130px; overflow-y:auto; margin:0 0 8px; white-space:pre-wrap;"></pre>
+          <div style="display:flex; gap:6px; margin-bottom:8px; align-items:flex-end;">
+            <div class="gn-field" style="flex:1; margin:0;" title="Dwell after spindle start before moving (seconds)">
+              <label>Spindle delay (s)</label>
+              <input type="number" id="gn-sfl-delay" min="0" step="0.5" value="2" />
+            </div>
+            <div class="gn-field" style="flex:1; margin:0;" title="Rapid to this height above the target Z, then plunge at the controlled feed">
+              <label>Approach (mm)</label>
+              <input type="number" id="gn-sfl-approach" min="0" step="1" value="5" />
+            </div>
+            <div class="gn-field" style="flex:1; margin:0;" title="Feed rate for the final plunge to depth (mm/min)">
+              <label>Plunge F</label>
+              <input type="number" id="gn-sfl-plunge" min="10" step="50" value="500" />
+            </div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="gn-btn" id="gn-sfl-go" style="flex:1; background:#1e6b3a; border-color:#2e7b4a; margin:0;">Confirm &amp; Start</button>
+            <button class="gn-btn" id="gn-sfl-cancel" style="flex:1; margin:0;">Cancel</button>
+          </div>
+          <div class="gn-error" id="gn-sfl-error"></div>
+        </div>
+      </div>
+
+      <div class="gn-panel-box">
+        <button class="gn-btn" id="gn-retract-btn" title="Raises Z to the safe height (app setting or custom below). Also applied before Trace Contour Outline and Rapid to Point when the checkbox is on.">Retract to Safe Z</button>
+        <div class="gn-checkbox-row">
+          <input type="checkbox" id="gn-raisez" checked />
+          <label for="gn-raisez" style="margin:0;" title="Applies to both Trace Contour Outline and Rapid to Point, including map-menu rapids.">Raise Z to safe height first</label>
+        </div>
+        <div class="gn-checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="gn-preset-z-toggle" />
+          <label for="gn-preset-z-toggle" style="margin:0;" title="Used instead of the app's Safe Z Retract Height setting everywhere in this panel.">Custom safe height (mm, machine coords)</label>
+        </div>
+        <div class="gn-field" id="gn-preset-z-field" style="display:none; margin:6px 0 0;">
+          <input type="number" id="gn-preset-z-input" step="0.5" value="10" />
+        </div>
+      </div>
+
+      <div class="gn-panel-box">
+        <button class="gn-btn yellow" id="gn-rapid-point-btn" title="Moves to the yellow marker: the creep position, a contour vertex, or a snapped point from the map menu. Use it to eyeball clearance over your stock before starting a job.">Rapid to Point</button>
+        <div class="gn-field" style="margin-bottom:0;">
+          <label>Creep along selected line (0% = start, 100% = end)</label>
+          <input type="range" id="gn-creep-slider" min="0" max="100" value="0" style="width:100%;" />
+        </div>
+        <div class="gn-error" id="gn-line-error"></div>
+      </div>
+
+      <div class="gn-panel-box" id="gn-contour-box">
+        <button class="gn-btn pink" id="gn-trace-contour-btn" title="Runs the spindle around the purple outline with rapids and returns to the first vertex — like ncSender's built-in Trace Outline, but following the true silhouette instead of a bounding box.">Trace Contour Outline&hellip;</button>
+        <div id="gn-contour-pending" style="display:none; margin:6px 0;">
+          <div class="gn-note" style="margin-bottom:4px;">Contour skipped on this large file to keep loading fast.</div>
+          <button class="gn-btn" id="gn-contour-compute-btn" style="background:#3a3d41;">Compute Contour Outline</button>
+        </div>
+        <div id="gn-contour-working" style="display:none; margin:6px 0;">
+          <div class="gn-progress"><div class="gn-progress-fill" id="gn-contour-bar"></div></div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+            <span class="gn-note" id="gn-contour-stage" style="margin:0;">Working&hellip;</span>
+            <button id="gn-contour-cancel-btn" style="background:none; border:1px solid #666; color:inherit; border-radius:4px; padding:2px 10px; cursor:pointer; font-size:11px;">Cancel</button>
+          </div>
+        </div>
+        <div class="gn-field" style="margin-bottom:2px;">
+          <label title="Bounding box, convex hull, merged single shape, or shrink-wrapped to every part — with gradients between.">Outline style: box &#8594; convex &#8594; merged &#8594; shrink-wrapped</label>
+          <input type="range" id="gn-tightness" min="0" max="12" value="12" step="1" list="gn-tightness-ticks" style="width:100%;" />
+          <datalist id="gn-tightness-ticks">
+            <option value="0"></option><option value="4"></option><option value="8"></option><option value="12"></option>
+          </datalist>
+        </div>
+        <div class="gn-checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="gn-include-rapids" />
+          <label for="gn-include-rapids" style="margin:0;">Include rapid (G0) moves in contour</label>
+        </div>
+        <div class="gn-error" id="gn-trace-error"></div>
+      </div>
+
+      </div>
+      <div class="gn-panel-box" id="gn-jog-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span class="gn-note" style="margin:0;">JOG &amp; ZERO</span>
+          <span style="display:flex; align-items:center; gap:5px;">
+            <span style="font-size:12px; opacity:0.85;">Feed</span>
+            <select id="gn-jog-feed" class="gn-feed-select" title="XY jog feed (mm/min); Z is capped at 1200">
+              <option value="500">500</option>
+              <option value="1000">1000</option>
+              <option value="2000" selected>2000</option>
+              <option value="4000">4000</option>
+            </select>
+          </span>
+        </div>
+        <div class="gn-jog-cluster">
+          <div class="gn-note" style="margin:0 0 2px; grid-column: 1 / -1;">Step (mm) &middot; tap = step &middot; hold = continuous</div>
+          <div class="gn-jog-row" id="gn-jog-steps" title="Jog step in mm (tap = one step, hold = continuous)">
+            <button class="gn-step-pill" data-step="0.1">0.1</button>
+            <button class="gn-step-pill gn-step-active" data-step="1">1</button>
+            <button class="gn-step-pill" data-step="10">10</button>
+            <span></span>
+          </div>
+          <div class="gn-jog-row">
+            <button class="gn-jog-btn" data-jog="-1,1">&#8598;</button>
+            <button class="gn-jog-btn" data-jog="0,1">Y+</button>
+            <button class="gn-jog-btn" data-jog="1,1">&#8599;</button>
+            <button class="gn-jog-btn gn-jog-z" data-jogz="1">Z+</button>
+          </div>
+          <div class="gn-jog-row">
+            <button class="gn-jog-btn" data-jog="-1,0">X&minus;</button>
+            <button class="gn-jog-btn gn-jog-stop" id="gn-jog-cancel" title="Jog cancel (0x85)">&#9632;</button>
+            <button class="gn-jog-btn" data-jog="1,0">X+</button>
+            <button class="gn-jog-btn gn-jog-z" data-jogz="-1">Z&minus;</button>
+          </div>
+          <div class="gn-jog-row">
+            <button class="gn-jog-btn" data-jog="-1,-1">&#8601;</button>
+            <button class="gn-jog-btn" data-jog="0,-1">Y&minus;</button>
+            <button class="gn-jog-btn" data-jog="1,-1">&#8600;</button>
+            <span></span>
+          </div>
+          <div class="gn-jog-row gn-zero-row">
+            <button class="gn-hold-zero" data-zero="X0 Y0"><span class="gn-zero-label">XY0</span><span class="gn-zero-sub">Hold</span></button>
+            <button class="gn-hold-zero" data-zero="Z0"><span class="gn-zero-label">Z0</span><span class="gn-zero-sub">Hold</span></button>
+          </div>
+        </div>
+        <div class="gn-note" id="gn-jog-msg" style="margin:4px 0 0; color:#e9a1a1; display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="gn-ctx-menu"></div>
+
+<div id="gn-confirm-overlay">
+  <div id="gn-confirm-card">
+    <div id="gn-confirm-title"></div>
+    <div id="gn-confirm-body"></div>
+    <div class="gn-confirm-btns">
+      <button class="gn-btn" id="gn-confirm-abort">Abort</button>
+      <button class="gn-btn orange" id="gn-confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // Host API bridge — same convention as ncSender's own plugin
+  // config UIs: window.ncSender.getApiBaseUrl() is injected by
+  // the dialog host.
+  // ============================================================
+  var FALLBACK_PORT = __SERVER_PORT__;
+  var resolveApiBaseUrl = function () {
+    if (window.ncSender && typeof window.ncSender.getApiBaseUrl === 'function') {
+      return window.ncSender.getApiBaseUrl(FALLBACK_PORT);
+    }
+    return '';
+  };
+  var BASE_URL = resolveApiBaseUrl();
+
+  function api(path, options) {
+    return fetch(BASE_URL + path, options).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) {
+          var err = new Error((body && (body.error || body.message)) || ('Request failed: ' + path));
+          err.body = body;
+          throw err;
+        }
+        return body;
+      });
+    });
+  }
+
+  function getSettings() { return api('/api/settings'); }
+  function getCurrentGcodeText() {
+    return fetch(BASE_URL + '/api/gcode-files/current/download').then(function (res) {
+      if (!res.ok) throw new Error('No G-code file is currently loaded in ncSender.');
+      return res.text();
+    });
+  }
+  function sendCommand(command, displayCommand) {
+    return api('/api/send-command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: command, displayCommand: displayCommand || command })
+    });
+  }
+
+  function setStatus(msg, isError) {
+    var el = document.getElementById('gn-status');
+    el.textContent = msg || '';
+    el.style.color = isError ? 'var(--gn-danger)' : '';
+  }
+
+  // ============================================================
+  // G-code parsing (unchanged from v0.1)
+  // ============================================================
+  function stripComments(line) {
+    var result = line;
+    while (true) {
+      var start = result.indexOf('(');
+      if (start < 0) break;
+      var end = result.indexOf(')', start);
+      if (end < 0) break;
+      result = result.slice(0, start) + result.slice(end + 1);
+    }
+    var semi = result.indexOf(';');
+    if (semi >= 0) result = result.slice(0, semi);
+    return result.trim();
+  }
+
+  function parseWords(line) {
+    if (line.length > 1 && /[Nn]/.test(line[0]) && /\d/.test(line[1])) {
+      var spaceIdx = line.indexOf(' ');
+      if (spaceIdx > 0) line = line.slice(spaceIdx + 1);
+    }
+    var words = [];
+    var i = 0;
+    while (i < line.length) {
+      var c = line[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (!/[A-Za-z]/.test(c)) { i++; continue; }
+      var letter = c.toUpperCase();
+      i++;
+      var start = i;
+      while (i < line.length && /[0-9.\-+]/.test(line[i])) i++;
+      var numStr = line.slice(start, i);
+      var value = parseFloat(numStr);
+      if (start < i && !isNaN(value)) {
+        words.push({ letter: letter, value: value });
+      }
+    }
+    return words;
+  }
+
+  function tessellateArc(x0, y0, x1, y1, i, j, clockwise, steps) {
+    var cx = x0 + i, cy = y0 + j;
+    var r = Math.hypot(i, j);
+    var a0 = Math.atan2(y0 - cy, x0 - cx);
+    var a1 = Math.atan2(y1 - cy, x1 - cx);
+    var span;
+    if (clockwise) {
+      span = a0 - a1;
+      if (span <= 0) span += 2 * Math.PI;
+      span = -span;
+    } else {
+      span = a1 - a0;
+      if (span <= 0) span += 2 * Math.PI;
+    }
+    var n = Math.max(6, steps || Math.ceil(Math.abs(span) / (Math.PI / 24)));
+    var pts = [];
+    for (var k = 1; k <= n; k++) {
+      var t = a0 + (span * k) / n;
+      pts.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) });
+    }
+    return pts;
+  }
+
+  // Parser core: split into init / processRange / finish so huge files can
+  // be parsed in chunks off the event loop (parseGcodeAsync) while small
+  // files and the test harness keep the synchronous parseGcode.
+  function createGcodeParser(text) {
+    var lines = text.split('\n');
+    var state = { x: 0, y: 0, z: 0, a: 0, s: 0, motion: null, positioning: 'G90', unitsMode: null, tool: null };
+    var sawRotary = false;
+    var segments = [];
+    var tools = [];
+    // S (spindle/laser power) and Z (pass depth) tracking, used to shade
+    // feed segments so laser-power-modulated raster jobs render as the
+    // actual burned image instead of a solid block, and multi-pass carves
+    // show which lines belong to which depth.
+    var maxS = 0;
+    var zLevelSet = {};
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    function extend(x, y) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+
+    function processRange(fromIdx, toIdx) {
+    for (var idx = fromIdx; idx < toIdx; idx++) {
+      var lineNo = idx + 1;
+      var clean = stripComments(lines[idx].trim());
+      if (!clean) continue;
+      var words = parseWords(clean);
+      if (!words.length) continue;
+
+      var iVal = 0, jVal = 0, hasI = false, hasJ = false;
+      var xVal = null, yVal = null, zVal = null, aVal = null;
+
+      for (var w = 0; w < words.length; w++) {
+        var wd = words[w];
+        switch (wd.letter) {
+          case 'G':
+            if (wd.value === 0 || wd.value === 1 || wd.value === 2 || wd.value === 3) {
+              state.motion = 'G' + wd.value;
+            } else if (wd.value === 90 || wd.value === 91) {
+              state.positioning = 'G' + wd.value;
+            } else if (wd.value === 20 || wd.value === 21) {
+              state.unitsMode = 'G' + wd.value;
+            }
+            break;
+          case 'X': xVal = wd.value; break;
+          case 'Y': yVal = wd.value; break;
+          case 'Z': zVal = wd.value; break;
+          case 'A': aVal = wd.value; break;
+          case 'I': iVal = wd.value; hasI = true; break;
+          case 'J': jVal = wd.value; hasJ = true; break;
+          case 'S':
+            state.s = wd.value;
+            if (state.s > maxS) maxS = state.s;
+            break;
+          case 'M':
+            // M5 = spindle/laser stop. Many laser posts leave the last S
+            // word in place and rely on M5 alone to mean "off" — without
+            // this the segments after a mid-file M5 would keep shading at
+            // the old power level.
+            if (wd.value === 5) state.s = 0;
+            break;
+          case 'T':
+            state.tool = wd.value;
+            if (tools.indexOf(wd.value) < 0) tools.push(wd.value);
+            break;
+        }
+      }
+
+      var hasMotionWord = xVal !== null || yVal !== null || zVal !== null || aVal !== null || hasI || hasJ;
+      if (!hasMotionWord || !state.motion) continue;
+
+      var x0 = state.x, y0 = state.y, z0 = state.z, a0 = state.a;
+      var x1 = x0, y1 = y0, z1 = z0, a1 = a0;
+      if (state.positioning === 'G90') {
+        if (xVal !== null) x1 = xVal;
+        if (yVal !== null) y1 = yVal;
+        if (zVal !== null) z1 = zVal;
+        if (aVal !== null) a1 = aVal;
+      } else {
+        if (xVal !== null) x1 = x0 + xVal;
+        if (yVal !== null) y1 = y0 + yVal;
+        if (zVal !== null) z1 = z0 + zVal;
+        if (aVal !== null) a1 = a0 + aVal;
+      }
+      if (a1 !== a0) sawRotary = true;
+
+      var seg = { line: lineNo, type: state.motion, tool: state.tool, x0: x0, y0: y0, z0: z0, x1: x1, y1: y1, z1: z1, a0: a0, a1: a1, s: state.s, points: null };
+      if (state.motion === 'G2' || state.motion === 'G3') {
+        seg.points = tessellateArc(x0, y0, x1, y1, iVal, jVal, state.motion === 'G2');
+      }
+      if (state.motion !== 'G0') zLevelSet[z1.toFixed(3)] = true;
+
+      segments.push(seg);
+      extend(x0, y0); extend(x1, y1);
+      if (seg.points) seg.points.forEach(function (p) { extend(p.x, p.y); });
+
+      state.x = x1; state.y = y1; state.z = z1; state.a = a1;
+    }
+    }
+
+    function finish() {
+      if (!isFinite(minX)) { minX = minY = 0; maxX = maxY = 1; }
+      var zLevels = Object.keys(zLevelSet).map(Number).sort(function (a, b) { return a - b; });
+      return {
+        segments: segments, hasRotary: sawRotary, totalLines: lines.length, tools: tools,
+        bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY }, units: state.unitsMode,
+        maxS: maxS, zLevels: zLevels
+      };
+    }
+
+    return { lineCount: lines.length, processRange: processRange, finish: finish };
+  }
+
+  function parseGcode(text) {
+    var p = createGcodeParser(text);
+    p.processRange(0, p.lineCount);
+    return p.finish();
+  }
+
+  // Chunked parse: yields to the event loop every CHUNK lines so the
+  // dialog stays responsive and can show progress on multi-hundred-
+  // thousand-line files instead of freezing.
+  function parseGcodeAsync(text, onProgress) {
+    return new Promise(function (resolve) {
+      var p = createGcodeParser(text);
+      var CHUNK = 80000;
+      var idx = 0;
+      function step() {
+        var end = Math.min(idx + CHUNK, p.lineCount);
+        p.processRange(idx, end);
+        idx = end;
+        if (onProgress) onProgress(idx, p.lineCount);
+        if (idx < p.lineCount) setTimeout(step, 0);
+        else resolve(p.finish());
+      }
+      step();
+    });
+  }
+
+  function findSegmentForLine(parsed, lineNumber) {
+    var best = null;
+    for (var i = 0; i < parsed.segments.length; i++) {
+      var s = parsed.segments[i];
+      if (s.line === lineNumber) return s;
+      if (s.line < lineNumber) best = s;
+      if (s.line > lineNumber) break;
+    }
+    return best;
+  }
+
+  // Distance from point to a line segment (world units) — used for hit
+  // testing so a click lands on the *nearest drawn path*, not just the
+  // nearest endpoint like v0.1 did.
+  function pointSegDist(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    var len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - ax, py - ay);
+    var t = ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  // Tiered snap for context-menu targeting: prefer a true vertex when the
+  // point is within vTol of one, else the perpendicular projection onto the
+  // nearest edge when within eTol, else the raw free-space point. Returns
+  // {x, y, kind: 'vertex'|'edge'|'free', vIndex, polyIndex}.
+  function snapToPolylines(world, polylines, vTol, eTol) {
+    var bestV = null, bestVD = Infinity, bestVI = -1, bestVP = -1;
+    var bestE = null, bestED = Infinity;
+    for (var pi = 0; pi < polylines.length; pi++) {
+      var poly = polylines[pi];
+      for (var vi = 0; vi < poly.length; vi++) {
+        var dv = Math.hypot(poly[vi].x - world.x, poly[vi].y - world.y);
+        if (dv < bestVD) { bestVD = dv; bestV = poly[vi]; bestVI = vi; bestVP = pi; }
+        if (vi < poly.length - 1) {
+          var ax = poly[vi].x, ay = poly[vi].y, bx = poly[vi + 1].x, by = poly[vi + 1].y;
+          var dx = bx - ax, dy = by - ay;
+          var len2 = dx * dx + dy * dy;
+          var t = len2 === 0 ? 0 : ((world.x - ax) * dx + (world.y - ay) * dy) / len2;
+          t = Math.max(0, Math.min(1, t));
+          var qx = ax + t * dx, qy = ay + t * dy;
+          var de = Math.hypot(world.x - qx, world.y - qy);
+          if (de < bestED) { bestED = de; bestE = { x: qx, y: qy }; }
+        }
+      }
+    }
+    if (bestV && bestVD <= vTol) {
+      return { x: bestV.x, y: bestV.y, kind: 'vertex', vIndex: bestVI, polyIndex: bestVP };
+    }
+    if (bestE && bestED <= eTol) {
+      return { x: bestE.x, y: bestE.y, kind: 'edge', vIndex: -1, polyIndex: -1 };
+    }
+    return { x: world.x, y: world.y, kind: 'free', vIndex: -1, polyIndex: -1 };
+  }
+
+  function findNearestSegment(parsed, x, y, segFilter) {
+    var best = null, bestDist = Infinity;
+    parsed.segments.forEach(function (s) {
+      if (segFilter && !segFilter(s)) return;
+      var pts = s.points ? [{ x: s.x0, y: s.y0 }].concat(s.points) : [{ x: s.x0, y: s.y0 }, { x: s.x1, y: s.y1 }];
+      for (var i = 0; i < pts.length - 1; i++) {
+        var d = pointSegDist(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+        if (d < bestDist) { bestDist = d; best = s; }
+      }
+    });
+    return { segment: best, dist: bestDist };
+  }
+
+  // ============================================================
+  // Concave hull
+  //
+  // v0.5 fix: the hull previously ran on segment ENDPOINTS only. Long
+  // straight outer edges contribute just two points, far apart, while
+  // interior passes (pocket spirals etc.) are dense — so the k-nearest
+  // neighbours of an outer corner were interior points and the hull cut
+  // across concave features regardless of the concavity setting. The fix
+  // is to densify: resample every segment at a regular step so boundary
+  // edges are as dense as everything else, run the hull, then simplify
+  // the result back down to true corners (collinear-point removal) so the
+  // vertex list stays short and meaningful.
+  // ============================================================
+  function densifySegments(segments, includeRapids, bounds, units) {
+    var bw = Math.max(bounds.maxX - bounds.minX, 0.001);
+    var bh = Math.max(bounds.maxY - bounds.minY, 0.001);
+    var step = Math.max(bw, bh) / 1000;
+    var pts = [];
+    var polys = []; // exact polylines (segment endpoints + arc tessellation) for snapping
+    function addLine(x0, y0, x1, y1) {
+      var len = Math.hypot(x1 - x0, y1 - y0);
+      var n = Math.max(1, Math.ceil(len / step));
+      for (var i = 0; i <= n; i++) {
+        pts.push({ x: x0 + (x1 - x0) * i / n, y: y0 + (y1 - y0) * i / n });
+      }
+    }
+    segments.forEach(function (s) {
+      if (s.type === 'G0' && !includeRapids) return;
+      var poly = s.points
+        ? [{ x: s.x0, y: s.y0 }].concat(s.points)
+        : [{ x: s.x0, y: s.y0 }, { x: s.x1, y: s.y1 }];
+      polys.push(poly);
+      for (var i = 0; i < poly.length - 1; i++) {
+        addLine(poly[i].x, poly[i].y, poly[i + 1].x, poly[i + 1].y);
+      }
+    });
+    // Cap the point LIST only (it is used just for the convex-hull
+    // fallback); the occupancy grid is rasterized from the exact polylines
+    // in traceOuterContour, so the cap no longer coarsens the grid step.
+    // (Previously step *= stride here silently degraded the grid to a few
+    // hundred cells on long engraving files — the real cause of the
+    // corner-cutting the resolution bumps never fixed.)
+    var MAX_POINTS = 40000;
+    if (pts.length > MAX_POINTS) {
+      var stride = Math.ceil(pts.length / MAX_POINTS);
+      pts = pts.filter(function (_, i) { return i % stride === 0; });
+    }
+    return { points: pts, step: step, polys: polys, mmScale: units === 'G20' ? 25.4 : 1 };
+  }
+
+  // Remove hull vertices that are (nearly) collinear with their neighbours,
+  // so densified boundary runs collapse back to their true corner points.
+  // Linear-time collinear reduction for huge raster contours (a comb-like
+  // boundary can be hundreds of thousands of cells; the iterative
+  // splice-removal simplifier is O(n^2) on that). A few one-directional
+  // passes cut it to a few thousand vertices before the precise simplifier
+  // runs.
+  // Lossless direction-run compression for raster boundaries: keep a point
+  // only where the step direction changes, so straight runs collapse to
+  // their endpoints EXACTLY. (The previous epsilon-based reducer compared
+  // each point against the chord from the last KEPT point to the next RAW
+  // point; on smooth arcs that chord always hugs the curve, so the anchor
+  // receded point by point and whole arcs were silently eaten — rectangles
+  // and combs masked it because corners always survive.)
+  function fastCollinearReduce(pts) {
+    var n = pts.length;
+    if (n <= 3) return pts;
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var a = pts[(i - 1 + n) % n], b = pts[i], c = pts[(i + 1) % n];
+      var d1x = Math.sign(b.x - a.x), d1y = Math.sign(b.y - a.y);
+      var d2x = Math.sign(c.x - b.x), d2y = Math.sign(c.y - b.y);
+      if (d1x !== d2x || d1y !== d2y) out.push(b);
+    }
+    return out.length >= 3 ? out : pts;
+  }
+
+  function simplifyHull(hullPts, eps) {
+    if (!hullPts || hullPts.length <= 3) return hullPts;
+    var out = hullPts.slice();
+    var changed = true;
+    while (changed && out.length > 3) {
+      changed = false;
+      for (var i = 0; i < out.length; i++) {
+        var prev = out[(i - 1 + out.length) % out.length];
+        var cur = out[i];
+        var next = out[(i + 1) % out.length];
+        if (pointSegDist(cur.x, cur.y, prev.x, prev.y, next.x, next.y) < eps) {
+          out.splice(i, 1);
+          changed = true;
+          i--;
+        }
+      }
+    }
+    return out;
+  }
+
+  function pointInPolygon(pt, poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      var intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // The bridging dial was removed from the UI (v0.7): tracing at the
+  // tightest setting is always correct for connected geometry, and the only
+  // real use for bridging was disconnected geometry (multiple parts on a
+  // sheet), where the tracer would otherwise outline only the region
+  // containing the lowest point. That is now handled automatically: trace
+  // tight, measure how many toolpath points the result actually encloses,
+  // and only escalate dilation if geometry turns out to be disconnected.
+  // If parts are too far apart to bridge sensibly, fall back to the convex
+  // hull, which is guaranteed to enclose everything.
+  function autoTraceContour(dens, closeRadius, onProgress) {
+    // Single pass: MST corridor bridging inside traceOuterContour connects
+    // all components at their closest points, so there is no escalation
+    // ladder any more. Coverage (traced component + enclosed cells) is kept
+    // as a sanity check with a convex-hull fallback.
+    var hullPts = traceOuterContour(dens, closeRadius, onProgress);
+    if (hullPts && hullPts.length >= 3 && hullPts.coverage >= 0.995) {
+      return { hull: hullPts, bridges: hullPts.bridgeCount, parts: hullPts.componentCount, fallback: false };
+    }
+    return { hull: convexHull(dens.points), bridges: 0, parts: hullPts ? hullPts.componentCount : 0, fallback: true };
+  }
+
+  function convexHull(points) {
+    var pts = points.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+    function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+    var lower = [];
+    for (var i = 0; i < pts.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+      lower.push(pts[i]);
+    }
+    var upper = [];
+    for (var j = pts.length - 1; j >= 0; j--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
+      upper.push(pts[j]);
+    }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+
+  // ============================================================
+  // Outer contour via occupancy-grid boundary tracing (v0.5).
+  //
+  // v0.4 and earlier used a k-nearest-neighbours concave hull. That
+  // algorithm is designed for scattered point clouds; on densely sampled
+  // *boundary* points its "sharpest right turn" step prefers hairpin
+  // reversals along the same collinear edge (and a ccw-based intersection
+  // test cannot reject collinear overlaps), so it failed on real toolpaths
+  // and silently fell back to the convex hull — which is exactly the
+  // corner-bridging seen on the spiral pocket test file.
+  //
+  // The replacement is the standard image-outlining approach:
+  //   1. rasterize the densified toolpath points into an occupancy grid
+  //      (cell size == densify step, so consecutive samples always land in
+  //      the same or an 8-adjacent cell — the path is grid-connected);
+  //   2. optionally dilate by the "bridging" radius (the old concavity
+  //      slider, now with a physical meaning: how large a gap or notch
+  //      gets smoothed over);
+  //   3. trace the outer boundary with Moore neighbour tracing;
+  //   4. map boundary cells back to world coordinates, snap each vertex to
+  //      the nearest actual toolpath point, and collapse collinear runs.
+  // This cannot self-intersect, follows concave features by construction,
+  // and is O(grid) fast.
+  // ============================================================
+  function traceOuterContour(densified, closeRadius, onProgress) {
+    if (onProgress) onProgress('raster');
+    var pts = densified.points;
+    var step = densified.step;
+    if (!pts.length) return [];
+
+    // Fixed dilation of 1: Moore tracing on a 1-cell-wide curve can double
+    // back on itself and terminate early (classic thin-line failure of the
+    // simple stop criterion). One cell of dilation makes the region at
+    // least 3 cells wide so the outer boundary is well-defined, and vertex
+    // snapping (below) pulls the result back onto exact toolpath points, so
+    // no tightness is lost. Cross-part bridging is handled separately by
+    // the MST corridors below, not by dilation.
+    var dil = 1;
+
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    (densified.polys || []).forEach(function (poly) {
+      poly.forEach(function (p) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+      });
+    });
+    if (!isFinite(minX)) return [];
+
+    var margin = (dil + 2) * step;
+    minX -= margin; minY -= margin; maxX += margin; maxY += margin;
+    var W = Math.max(4, Math.ceil((maxX - minX) / step) + 1);
+    var H = Math.max(4, Math.ceil((maxY - minY) / step) + 1);
+    var occ = new Uint8Array(W * H);
+
+    // Rasterize directly from the exact segment polylines (NOT the capped
+    // point list): full grid resolution regardless of how long the file is.
+    function markCell(px, py) {
+      var cx = Math.floor((px - minX) / step);
+      var cy = Math.floor((py - minY) / step);
+      if (cx >= 0 && cy >= 0 && cx < W && cy < H) occ[cy * W + cx] = 1;
+    }
+    var polysR = densified.polys || [];
+    for (var pr = 0; pr < polysR.length; pr++) {
+      var poly = polysR[pr];
+      for (var sv = 0; sv < poly.length - 1; sv++) {
+        var ax = poly[sv].x, ay = poly[sv].y, bx = poly[sv + 1].x, by = poly[sv + 1].y;
+        var segLen = Math.hypot(bx - ax, by - ay);
+        var nSteps = Math.max(1, Math.ceil(segLen / (step * 0.5)));
+        for (var ss = 0; ss <= nSteps; ss++) {
+          markCell(ax + (bx - ax) * ss / nSteps, ay + (by - ay) * ss / nSteps);
+        }
+      }
+    }
+
+    // MST corridor bridging (v0.17). Uniform closing had to dilate until
+    // the LARGEST gap anywhere merged — on text-engraving sheets (thousands
+    // of disconnected strokes) that meant heavy dilation, which rounds and
+    // cuts corners regardless of grid resolution. Instead: label the
+    // connected components, run one multi-source Chebyshev BFS to find each
+    // pair's closest approach, take the minimum spanning tree, and carve a
+    // thin corridor between each MST pair at exactly their nearest points.
+    // Everywhere else the region is the true geometry dilated by just 1
+    // cell (Moore-trace thin-line safety) — the outline hugs the real shape
+    // within ~1 cell and cannot cut corners, and there is no escalation
+    // loop: one pass regardless of how many parts the sheet has.
+
+    // -- dilate by 1 FIRST (before labeling): heals the 1-cell gaps that
+    //    floating-point cell assignment can leave in the raw raster (e.g.
+    //    0.3/0.1 floors to 2 while 0.4/0.1 floors to 4), and provides the
+    //    Moore-trace thin-line safety. Labeling the raw raster instead
+    //    fragmented a single rectangle into hundreds of components. --
+    var grown = new Uint8Array(W * H);
+    for (var dyy = 0; dyy < H; dyy++) {
+      for (var dxx = 0; dxx < W; dxx++) {
+        if (!occ[dyy * W + dxx]) continue;
+        for (var oy = -1; oy <= 1; oy++) {
+          for (var ox = -1; ox <= 1; ox++) {
+            var zx = dxx + ox, zy = dyy + oy;
+            if (zx >= 0 && zy >= 0 && zx < W && zy < H) grown[zy * W + zx] = 1;
+          }
+        }
+      }
+    }
+    occ = grown;
+    if (onProgress) onProgress('bridge');
+
+    // -- label components (8-conn) and bridge them with thin MST corridors
+    //    at their nearest points (the fully-cinched baseline outline) --
+    function labelComponents() {
+      var labels = new Int32Array(W * H);
+      var ncomp = 0;
+      var fstack = [];
+      for (var si = 0; si < W * H; si++) {
+        if (!occ[si] || labels[si]) continue;
+        ncomp++;
+        labels[si] = ncomp;
+        fstack.push(si);
+        while (fstack.length) {
+          var fc = fstack.pop();
+          var fy = (fc / W) | 0, fx = fc % W;
+          for (var qy = -1; qy <= 1; qy++) {
+            for (var qx = -1; qx <= 1; qx++) {
+              var gx = fx + qx, gy = fy + qy;
+              if (gx < 0 || gy < 0 || gx >= W || gy >= H) continue;
+              var gi = gy * W + gx;
+              if (occ[gi] && !labels[gi]) { labels[gi] = ncomp; fstack.push(gi); }
+            }
+          }
+        }
+      }
+      return { labels: labels, ncomp: ncomp };
+    }
+
+    function bridgeComponents(lab, ncomp, carve) {
+      var INF = 1 << 29;
+      var dist = new Int32Array(W * H).fill(INF);
+      var near = new Int32Array(W * H);
+      var frontier = [];
+      for (var bi = 0; bi < W * H; bi++) {
+        if (lab[bi]) { dist[bi] = 0; near[bi] = lab[bi]; frontier.push(bi); }
+      }
+      var edgeBest = {};
+      while (frontier.length) {
+        var nextFrontier = [];
+        for (var qf = 0; qf < frontier.length; qf++) {
+          var cc = frontier[qf];
+          var cyq = (cc / W) | 0, cxq = cc % W;
+          for (var ey = -1; ey <= 1; ey++) {
+            for (var ex = -1; ex <= 1; ex++) {
+              if (!ex && !ey) continue;
+              var hx = cxq + ex, hy = cyq + ey;
+              if (hx < 0 || hy < 0 || hx >= W || hy >= H) continue;
+              var hi = hy * W + hx;
+              if (dist[hi] === INF) {
+                dist[hi] = dist[cc] + 1;
+                near[hi] = near[cc];
+                nextFrontier.push(hi);
+              } else if (near[hi] !== near[cc]) {
+                var a = Math.min(near[hi], near[cc]), b = Math.max(near[hi], near[cc]);
+                var key = a + ':' + b;
+                var gap = dist[hi] + dist[cc];
+                if (!edgeBest[key] || gap < edgeBest[key].gap) {
+                  edgeBest[key] = { gap: gap, c1: cc, c2: hi, a: a, b: b };
+                }
+              }
+            }
+          }
+        }
+        frontier = nextFrontier;
+      }
+      var edges = Object.keys(edgeBest).map(function (k) { return edgeBest[k]; });
+      edges.sort(function (u, v) { return u.gap - v.gap; });
+      var parent = new Int32Array(ncomp + 1);
+      for (var pi = 0; pi <= ncomp; pi++) parent[pi] = pi;
+      function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+      function mark(cell) {
+        var my = (cell / W) | 0, mx = cell % W;
+        for (var ky = -1; ky <= 1; ky++) {
+          for (var kx = -1; kx <= 1; kx++) {
+            var px3 = mx + kx, py3 = my + ky;
+            if (px3 >= 0 && py3 >= 0 && px3 < W && py3 < H) occ[py3 * W + px3] = 1;
+          }
+        }
+      }
+      function descend(cell) {
+        var cur = cell;
+        var guard = 0;
+        while (dist[cur] > 0 && guard++ < W * H) {
+          mark(cur);
+          var by3 = (cur / W) | 0, bx3 = cur % W;
+          var bestN = cur;
+          for (var wy = -1; wy <= 1; wy++) {
+            for (var wx = -1; wx <= 1; wx++) {
+              var vx = bx3 + wx, vy = by3 + wy;
+              if (vx < 0 || vy < 0 || vx >= W || vy >= H) continue;
+              var vi = vy * W + vx;
+              if (dist[vi] < dist[bestN]) bestN = vi;
+            }
+          }
+          if (bestN === cur) break;
+          cur = bestN;
+        }
+        mark(cur);
+      }
+      var used = 0, maxGap = 0;
+      for (var eix = 0; eix < edges.length; eix++) {
+        var ed = edges[eix];
+        var ra = find(ed.a), rb = find(ed.b);
+        if (ra === rb) continue;
+        parent[ra] = rb;
+        used++;
+        if (ed.gap > maxGap) maxGap = ed.gap;
+        if (carve) { descend(ed.c1); descend(ed.c2); }
+      }
+      return { bridges: used, maxGap: maxGap };
+    }
+
+    // ==== Four-state outline model (v0.25) ====
+    // Slider t in 0..12 with semantic anchors, spacing-independent because
+    // the merge radius derives from the MEASURED largest inter-part gap:
+    //   t = 12  shrink-wrapped: every shape hugged, thin traversal necks
+    //   t = 8   merged single shape: interstitial gaps filled (closing at
+    //           the radius that unifies all parts), still following bumps
+    //   t = 4   convex hull: one loop catching the extreme x/y features
+    //   t = 0   bounding box
+    //   8..12 interpolates merge radius; 4..8 interpolates pocket depth on
+    //   the merged shape; 0..4 morphs convex hull toward the box.
+    var t12 = (closeRadius === undefined || closeRadius === null) ? 12 : Math.max(0, Math.min(12, closeRadius));
+
+    var lab1 = labelComponents();
+    var ncomp = lab1.ncomp;
+    var bridgeCount = ncomp > 1 ? bridgeComponents(lab1.labels, ncomp, true).bridges : 0;
+    if (onProgress) onProgress('trace');
+
+        function at(x, y) { return x >= 0 && y >= 0 && x < W && y < H && occ[y * W + x] === 1; }
+
+    // Start cell: first occupied scanning rows from min Y up, then min X —
+    // guaranteed to be on the outer boundary, with its W neighbour empty.
+    var start = null;
+    for (var sy = 0; sy < H && !start; sy++) {
+      for (var sx = 0; sx < W; sx++) {
+        if (at(sx, sy)) { start = [sx, sy]; break; }
+      }
+    }
+    if (!start) return [];
+
+    // Coverage: an occupied cell counts as covered if it belongs to the
+    // traced component OR is enclosed by it (not exposed to the exterior).
+    // The enclosure part matters: pocket/spiral interior passes are
+    // separate components geometrically but sit inside the outline and
+    // need no bridging. Unlike point-in-polygon on the snapped hull, this
+    // grid test cannot be fooled by snapping-induced self-intersections.
+    var totalOcc = 0;
+    for (var ti = 0; ti < W * H; ti++) if (occ[ti]) totalOcc++;
+
+    // (a) cells connected to the traced start component (8-conn)
+    var visited = new Uint8Array(W * H);
+    var stack = [start[1] * W + start[0]];
+    visited[stack[0]] = 1;
+    while (stack.length) {
+      var cell = stack.pop();
+      var cy0 = (cell / W) | 0, cx0 = cell % W;
+      for (var ddy = -1; ddy <= 1; ddy++) {
+        for (var ddx = -1; ddx <= 1; ddx++) {
+          var nx0 = cx0 + ddx, ny0 = cy0 + ddy;
+          if (nx0 < 0 || ny0 < 0 || nx0 >= W || ny0 >= H) continue;
+          var ni = ny0 * W + nx0;
+          if (occ[ni] && !visited[ni]) { visited[ni] = 1; stack.push(ni); }
+        }
+      }
+    }
+
+    // (b) exterior empty space: flood the empty cells from the grid border
+    // (4-conn so it can't leak diagonally through an 8-connected wall)
+    var outside = new Uint8Array(W * H);
+    var ostack = [];
+    for (var bx = 0; bx < W; bx++) {
+      if (!occ[bx]) { outside[bx] = 1; ostack.push(bx); }
+      var bi = (H - 1) * W + bx;
+      if (!occ[bi] && !outside[bi]) { outside[bi] = 1; ostack.push(bi); }
+    }
+    for (var by = 0; by < H; by++) {
+      var li = by * W;
+      if (!occ[li] && !outside[li]) { outside[li] = 1; ostack.push(li); }
+      var ri = by * W + (W - 1);
+      if (!occ[ri] && !outside[ri]) { outside[ri] = 1; ostack.push(ri); }
+    }
+    while (ostack.length) {
+      var oc = ostack.pop();
+      var oy = (oc / W) | 0, ox = oc % W;
+      var nbs = [[ox - 1, oy], [ox + 1, oy], [ox, oy - 1], [ox, oy + 1]];
+      for (var nb = 0; nb < 4; nb++) {
+        var qx = nbs[nb][0], qy = nbs[nb][1];
+        if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
+        var qi = qy * W + qx;
+        if (!occ[qi] && !outside[qi]) { outside[qi] = 1; ostack.push(qi); }
+      }
+    }
+
+    var covered = 0;
+    for (var cy2 = 0; cy2 < H; cy2++) {
+      for (var cx2 = 0; cx2 < W; cx2++) {
+        var ii = cy2 * W + cx2;
+        if (!occ[ii]) continue;
+        if (visited[ii]) { covered++; continue; }
+        // Enclosed if no 8-neighbour is exterior empty space
+        var exposed = false;
+        for (var ey = -1; ey <= 1 && !exposed; ey++) {
+          for (var ex = -1; ex <= 1 && !exposed; ex++) {
+            var px2 = cx2 + ex, py2 = cy2 + ey;
+            if (px2 < 0 || py2 < 0 || px2 >= W || py2 >= H) { exposed = true; break; }
+            if (outside[py2 * W + px2]) exposed = true;
+          }
+        }
+        if (!exposed) covered++;
+      }
+    }
+    var coverage = totalOcc > 0 ? covered / totalOcc : 0;
+
+    // Moore neighbour tracing, 8 directions clockwise starting at W.
+    var NB = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]];
+    function dirIndex(dx, dy) {
+      for (var i = 0; i < 8; i++) { if (NB[i][0] === dx && NB[i][1] === dy) return i; }
+      return 0;
+    }
+
+    var cells = [start.slice()];
+    var p = start.slice();
+    var backtrack = 0; // W of start is empty by construction of the scan
+    var firstFound = -1;
+    var startVisits = 0;
+    var maxSteps = W * H * 4;
+    for (var s = 0; s < maxSteps; s++) {
+      var found = -1;
+      for (var i = 1; i <= 8; i++) {
+        var d = (backtrack + i) % 8;
+        if (at(p[0] + NB[d][0], p[1] + NB[d][1])) { found = d; break; }
+      }
+      if (found < 0) break; // isolated single cell
+      if (s === 0) {
+        firstFound = found;
+      } else if (p[0] === start[0] && p[1] === start[1]) {
+        // Jacob's stopping criterion, exit-direction form: we are back at
+        // the start cell and about to move again. If the move we would
+        // make equals the very first move, the boundary walk has closed —
+        // stop BEFORE re-walking it (a same-cell-revisit stop terminates
+        // too early on spurs/necks where the boundary legitimately passes
+        // the start cell twice; a lenient visit-count stop walks the whole
+        // boundary twice, doubling the polygon and breaking everything
+        // downstream). Visit cap kept as a pure safety net.
+        if (found === firstFound) break;
+        if (++startVisits >= 3) break;
+      }
+      var prevD = (found + 7) % 8; // last empty neighbour before the hit
+      var ex = p[0] + NB[prevD][0], ey = p[1] + NB[prevD][1];
+      p = [p[0] + NB[found][0], p[1] + NB[found][1]];
+      backtrack = dirIndex(ex - p[0], ey - p[1]);
+      if (!(p[0] === start[0] && p[1] === start[1])) cells.push(p.slice());
+    }
+
+        if (onProgress) onProgress('snap');
+    // Cells -> world coordinates (cell centers).
+    var contour = cells.map(function (c) {
+      return { x: minX + (c[0] + 0.5) * step, y: minY + (c[1] + 0.5) * step };
+    });
+
+    // Coarse pre-simplify on the raster contour, then snap to exact
+    // toolpath geometry, then final collinear cleanup. The fast linear
+    // reduction first makes this tractable on huge boundaries.
+    contour = fastCollinearReduce(contour);
+    contour = simplifyHull(contour, step * 0.75);
+
+    // Geometry-exact snapping (v0.6). Nearest-SAMPLE snapping left vertices
+    // up to a grid cell off (≈5.5 mm on a 48" part). Instead:
+    //  - a contour vertex whose neighbours turn sharply is a CORNER: snap it
+    //    to the nearest true toolpath vertex (segment endpoint / arc
+    //    tessellation point), giving exact corner coordinates;
+    //  - a straight-run vertex snaps by perpendicular projection onto the
+    //    nearest toolpath segment, so it lies exactly ON the path.
+    // Accuracy is now independent of grid resolution.
+    var polys = densified.polys || [];
+    var snapR = (dil + 2.5) * step;
+
+    function nearestPolyVertex(v) {
+      var best = null, bestD = Infinity;
+      for (var pi = 0; pi < polys.length; pi++) {
+        var poly = polys[pi];
+        for (var vi = 0; vi < poly.length; vi++) {
+          var d = Math.hypot(poly[vi].x - v.x, poly[vi].y - v.y);
+          if (d < bestD) { bestD = d; best = poly[vi]; }
+        }
+      }
+      return { p: best, d: bestD };
+    }
+
+    function nearestPolyProjection(v) {
+      var best = null, bestD = Infinity;
+      for (var pi = 0; pi < polys.length; pi++) {
+        var poly = polys[pi];
+        for (var vi = 0; vi < poly.length - 1; vi++) {
+          var ax = poly[vi].x, ay = poly[vi].y, bx = poly[vi + 1].x, by = poly[vi + 1].y;
+          var dx = bx - ax, dy = by - ay;
+          var len2 = dx * dx + dy * dy;
+          var t = len2 === 0 ? 0 : ((v.x - ax) * dx + (v.y - ay) * dy) / len2;
+          t = Math.max(0, Math.min(1, t));
+          var qx = ax + t * dx, qy = ay + t * dy;
+          var d = Math.hypot(v.x - qx, v.y - qy);
+          if (d < bestD) { bestD = d; best = { x: qx, y: qy }; }
+        }
+      }
+      return { p: best, d: bestD };
+    }
+
+    function turnAngleDeg(prev, cur, next) {
+      var a1 = Math.atan2(cur.y - prev.y, cur.x - prev.x);
+      var a2 = Math.atan2(next.y - cur.y, next.x - cur.x);
+      var d = Math.abs(a2 - a1);
+      if (d > Math.PI) d = 2 * Math.PI - d;
+      return d * 180 / Math.PI;
+    }
+
+    var snapped = contour.map(function (v, i) {
+      var prev = contour[(i - 1 + contour.length) % contour.length];
+      var next = contour[(i + 1) % contour.length];
+      var isCorner = turnAngleDeg(prev, v, next) > 25;
+      if (isCorner) {
+        var nv = nearestPolyVertex(v);
+        if (nv.p && nv.d <= snapR) return { x: nv.p.x, y: nv.p.y };
+      }
+      var np = nearestPolyProjection(v);
+      if (np.p && np.d <= snapR) return np.p;
+      var nv2 = nearestPolyVertex(v);
+      return (nv2.p && nv2.d <= snapR) ? { x: nv2.p.x, y: nv2.p.y } : v;
+    });
+
+    // Drop consecutive duplicates introduced by snapping.
+    var cleaned = [];
+    snapped.forEach(function (v) {
+      var last = cleaned[cleaned.length - 1];
+      if (!last || Math.hypot(last.x - v.x, last.y - v.y) > step * 0.4) cleaned.push(v);
+    });
+    if (cleaned.length > 2) {
+      var first = cleaned[0], lastV = cleaned[cleaned.length - 1];
+      if (Math.hypot(first.x - lastV.x, first.y - lastV.y) <= step * 0.4) cleaned.pop();
+    }
+
+    var finalHull = simplifyHull(cleaned, step * 0.6);
+
+    // Rubber-band tension (the "Outline tightness" slider). The tight hull
+    // above is the fully-cinched band. Lower tension lets the band pull
+    // taut across concave POCKETS: compute the convex hull of the outline
+    // vertices, walk the outline pocket by pocket (runs between
+    // consecutive convex-hull vertices), and drop any pocket whose depth
+    // exceeds what the tension allows. tension 8 keeps every pocket
+    // (tight, necks included); tension 0 keeps none (pure convex belt —
+    // tangent wrap, like a band around pulleys); in between, the deepest
+    // dips (inter-part necks) are the first to be pulled straight —
+    // matching how a physical band relaxes. Closing could not do this:
+    // dilate-erode cannot bridge between convexly curving parts at any
+    // radius, because the dilated waist is thinner than the radius and
+    // erodes away.
+    if (onProgress) onProgress('finish');
+    // ==== Four-state outline model (v0.25) ====
+    // Slider t in 0..12, spacing-independent (thresholds derive from the
+    // measured pocket depths of THIS file's outline):
+    //   t = 12  shrink-wrapped: every shape hugged, thin traversal necks
+    //   t = 8   merged: the band lifts off the deep inter-shape necks and
+    //           crosses gaps as straight chords — one ring, still visiting
+    //           and hugging every shape (allowed dip = maxDepth/4)
+    //   t = 4   convex hull (allowed dip = 0)
+    //   t = 0   bounding box
+    //   4..12 is the continuous rubber-band allowance maxDepth*((t-4)/8)^2;
+    //   0..4 morphs the convex hull toward the box.
+    var t12 = (closeRadius === undefined || closeRadius === null) ? 12 : Math.max(0, Math.min(12, closeRadius));
+    if (t12 <= 4 && finalHull.length > 3) {
+      // Convex end of the range: the true convex hull, computed directly —
+      // always simple, always contains every part.
+      finalHull = convexHull(finalHull);
+      if (t12 < 4 && finalHull.length >= 3) {
+        // Support-function interpolation between the convex hull and its
+        // bounding box: h_f(theta) = f*h_CH + (1-f)*h_Box. Since the box
+        // contains the hull, h_Box >= h_CH everywhere, so h_f >= h_CH — the
+        // morph shape PROVABLY contains the convex hull at every slider
+        // position (the previous pointwise vertex lerp could cut corners
+        // of the geometry when sample correspondences misaligned).
+        var f2 = Math.max(0, Math.min(1, t12 / 4));
+        var mnX2 = Infinity, mnY2 = Infinity, mxX2 = -Infinity, mxY2 = -Infinity;
+        for (var b2 = 0; b2 < finalHull.length; b2++) {
+          var bv2 = finalHull[b2];
+          if (bv2.x < mnX2) mnX2 = bv2.x; if (bv2.x > mxX2) mxX2 = bv2.x;
+          if (bv2.y < mnY2) mnY2 = bv2.y; if (bv2.y > mxY2) mxY2 = bv2.y;
+        }
+        var KD = 72;
+        var hs = new Array(KD);
+        for (var kd = 0; kd < KD; kd++) {
+          var th = 2 * Math.PI * kd / KD;
+          var cth = Math.cos(th), sth = Math.sin(th);
+          var hCH = -Infinity;
+          for (var hv = 0; hv < finalHull.length; hv++) {
+            var dth = finalHull[hv].x * cth + finalHull[hv].y * sth;
+            if (dth > hCH) hCH = dth;
+          }
+          var hBox = Math.max(mnX2 * cth, mxX2 * cth) + Math.max(mnY2 * sth, mxY2 * sth);
+          hs[kd] = f2 * hCH + (1 - f2) * hBox;
+        }
+        // polygon from support lines: intersect consecutive lines, then
+        // convex-hull the candidates to prune redundant-line artifacts
+        var cand = [];
+        for (var kc = 0; kc < KD; kc++) {
+          var t1 = 2 * Math.PI * kc / KD, t2 = 2 * Math.PI * ((kc + 1) % KD) / KD;
+          var c1 = Math.cos(t1), s1 = Math.sin(t1), c2 = Math.cos(t2), s2 = Math.sin(t2);
+          var det = c1 * s2 - c2 * s1;
+          if (Math.abs(det) < 1e-12) continue;
+          cand.push({ x: (hs[kc] * s2 - hs[(kc + 1) % KD] * s1) / det, y: (c1 * hs[(kc + 1) % KD] - c2 * hs[kc]) / det });
+        }
+        var morphedH = convexHull(cand);
+        if (morphedH && morphedH.length >= 3) {
+          var simp2 = simplifyHull(morphedH, step * 0.3);
+          finalHull = (simp2 && simp2.length >= 3) ? simp2 : morphedH;
+        }
+      }
+    } else if (t12 < 12 && finalHull.length > 3) {
+      // 4 < t < 12: top-down recursive band refinement. Anchors start at
+      // the convex-hull vertices; each unanchored run between anchors is
+      // decided as a whole:
+      //   conform  — its max depth fits the allowance (ratio of its own
+      //              mouth width + an absolute term ramping over 8..12)
+      //   drop     — replaced by the straight chord between its anchors
+      //   split    — if the chord would TRAP geometry (a band cannot pass
+      //              through material), pin the deepest point and recurse
+      //              on both sides
+      // Decisions are per-run and top-down, so anchoring cannot creep
+      // point-by-point down smooth corridors (the failure of iterative
+      // propagation), and trapped-geometry splits make tour-order chords
+      // slicing across other parts impossible by construction.
+      var chT = convexHull(finalHull);
+      var chSetT = new Set(chT);
+      var startIdxT = -1;
+      for (var siT = 0; siT < finalHull.length; siT++) { if (chSetT.has(finalHull[siT])) { startIdxT = siT; break; } }
+      if (startIdxT >= 0) {
+        var rot = finalHull.slice(startIdxT).concat(finalHull.slice(0, startIdxT));
+        var N = rot.length;
+        var anchor = new Uint8Array(N + 1);
+        for (var aiT = 0; aiT < N; aiT++) if (chSetT.has(rot[aiT])) anchor[aiT] = 1;
+        anchor[N] = 1; // cyclic sentinel (same point as index 0)
+        var kRatio, absAllow, maxDepthT = 0;
+        // measure max pocket depth for the absolute ramp scale
+        {
+          var mA = 0;
+          for (var mi2 = 1; mi2 <= N; mi2++) {
+            if (anchor[mi2]) {
+              if (mi2 - mA > 1) {
+                var ma2 = rot[mA], mb2 = rot[mi2 % N];
+                for (var mq = mA + 1; mq < mi2; mq++) {
+                  var mdp = pointSegDist(rot[mq].x, rot[mq].y, ma2.x, ma2.y, mb2.x, mb2.y);
+                  if (mdp > maxDepthT) maxDepthT = mdp;
+                }
+              }
+              mA = mi2;
+            }
+          }
+        }
+        if (t12 >= 8) {
+          kRatio = 0.15;
+          absAllow = maxDepthT * Math.pow((t12 - 8) / 4, 2);
+        } else {
+          kRatio = 0.15 * Math.pow((t12 - 4) / 4, 2);
+          absAllow = 0;
+        }
+        var gpts = densified.points || [];
+        var trapStride = Math.max(1, Math.floor(gpts.length / 4000));
+        function runTrapsGeometry(from, to) {
+          var poly = [];
+          for (var rp = from; rp <= to; rp++) poly.push(rot[rp % N]);
+          if (poly.length < 3) return false;
+          var mnPX = Infinity, mnPY = Infinity, mxPX = -Infinity, mxPY = -Infinity;
+          for (var rb = 0; rb < poly.length; rb++) {
+            var rv = poly[rb];
+            if (rv.x < mnPX) mnPX = rv.x; if (rv.x > mxPX) mxPX = rv.x;
+            if (rv.y < mnPY) mnPY = rv.y; if (rv.y > mxPY) mxPY = rv.y;
+          }
+          for (var gp = 0; gp < gpts.length; gp += trapStride) {
+            var q = gpts[gp];
+            if (q.x < mnPX || q.x > mxPX || q.y < mnPY || q.y > mxPY) continue;
+            var inside = false;
+            for (var pi2 = 0, pj2 = poly.length - 1; pi2 < poly.length; pj2 = pi2++) {
+              var qi = poly[pi2], qj = poly[pj2];
+              if ((qi.y > q.y) !== (qj.y > q.y) && q.x < (qj.x - qi.x) * (q.y - qi.y) / (qj.y - qi.y) + qi.x) inside = !inside;
+            }
+            if (inside) {
+              // boundary points of the run itself register as epsilon-inside;
+              // trapped MATERIAL is well inside — require a clear margin
+              var margin = step * 2.5;
+              var clear = true;
+              for (var me = 0; me < poly.length; me++) {
+                var ea2 = poly[me], eb2 = poly[(me + 1) % poly.length];
+                if (pointSegDist(q.x, q.y, ea2.x, ea2.y, eb2.x, eb2.y) < margin) { clear = false; break; }
+              }
+              if (clear) return true;
+            }
+          }
+          return false;
+        }
+        // polygon orientation: interior is LEFT of travel for CCW
+        var shoel = 0;
+        for (var so = 0; so < N; so++) {
+          var sp1 = rot[so], sp2 = rot[(so + 1) % N];
+          shoel += sp1.x * sp2.y - sp2.x * sp1.y;
+        }
+        var ccwS = shoel >= 0 ? 1 : -1;
+        var refineStack = [];
+        var rA = 0;
+        for (var w4 = 1; w4 <= N; w4++) {
+          if (anchor[w4]) { if (w4 - rA > 1) refineStack.push([rA, w4]); rA = w4; }
+        }
+        var guard = 0;
+        while (refineStack.length && guard++ < N * 4) {
+          var seg2 = refineStack.pop();
+          var sa = seg2[0], sb = seg2[1];
+          if (sb - sa <= 1) continue;
+          var pa3 = rot[sa], pb3 = rot[sb % N];
+          var mouth = Math.hypot(pb3.x - pa3.x, pb3.y - pa3.y);
+          var runAllowed = kRatio * mouth + absAllow;
+          var maxD2 = -1, maxI2 = -1, maxOut = -1, maxOutI = -1;
+          var ex2 = pb3.x - pa3.x, ey2 = pb3.y - pa3.y;
+          var elen2 = Math.hypot(ex2, ey2) || 1e-9;
+          for (var q3 = sa + 1; q3 < sb; q3++) {
+            var d3 = pointSegDist(rot[q3].x, rot[q3].y, pa3.x, pa3.y, pb3.x, pb3.y);
+            if (d3 > maxD2) { maxD2 = d3; maxI2 = q3; }
+            // signed side: negative cross*ccw = OUTWARD of the chord
+            var crs = ((ex2) * (rot[q3].y - pa3.y) - (ey2) * (rot[q3].x - pa3.x)) * ccwS;
+            var outD = -crs / elen2;
+            if (outD > maxOut) { maxOut = outD; maxOutI = q3; }
+          }
+          if (maxOut > step) {
+            // The run bulges OUTWARD past its chord (sub-chords after
+            // splits aren't convex-hull edges). Dropping would slice the
+            // bulge off the outline — pin the most outward point instead
+            // and refine both sides.
+            anchor[maxOutI] = 1;
+            refineStack.push([sa, maxOutI]);
+            refineStack.push([maxOutI, sb]);
+          } else if (maxD2 <= runAllowed) {
+            for (var q4 = sa + 1; q4 < sb; q4++) anchor[q4] = 1; // conform
+          } else if (runTrapsGeometry(sa, sb)) {
+            anchor[maxI2] = 1; // pin on the trapped material, refine both sides
+            refineStack.push([sa, maxI2]);
+            refineStack.push([maxI2, sb]);
+          }
+          // else: whole run stays dropped (straight chord)
+        }
+        var banded = [];
+        for (var bi2 = 0; bi2 < N; bi2++) if (anchor[bi2]) banded.push(rot[bi2]);
+        if (banded.length >= 3) finalHull = banded;
+      }
+    }
+
+    // Outward clearance offset (all slider positions): hull vertices sit ON
+    // the toolpath, so chords between them cut inside smooth arcs by the
+    // sagitta (measured up to ~0.7 mm). The outline's contract is "always
+    // OUTSIDE the cut", so push every vertex out along its angle-bisector
+    // normal by a small clearance. Thin neck out-and-backs offset away from
+    // each other (outward normals oppose), so no self-crossing at this
+    // scale.
+    var clearance = Math.max(step * 2, 1.0 / (densified.mmScale || 1)); // >= 1 mm in real units
+    if (finalHull.length >= 3) {
+      var sgn = 0;
+      for (var oa = 0; oa < finalHull.length; oa++) {
+        var ov1 = finalHull[oa], ov2 = finalHull[(oa + 1) % finalHull.length];
+        sgn += ov1.x * ov2.y - ov2.x * ov1.y;
+      }
+      var ccw = sgn >= 0 ? 1 : -1;
+      var offset = [];
+      for (var ob = 0; ob < finalHull.length; ob++) {
+        var pv = finalHull[(ob - 1 + finalHull.length) % finalHull.length];
+        var cv = finalHull[ob];
+        var nv = finalHull[(ob + 1) % finalHull.length];
+        var e1x = cv.x - pv.x, e1y = cv.y - pv.y;
+        var e2x = nv.x - cv.x, e2y = nv.y - cv.y;
+        var l1 = Math.hypot(e1x, e1y) || 1e-9, l2 = Math.hypot(e2x, e2y) || 1e-9;
+        // outward normals for CCW polygons point right of travel: (dy, -dx)
+        var n1x = ccw * e1y / l1, n1y = -ccw * e1x / l1;
+        var n2x = ccw * e2y / l2, n2y = -ccw * e2x / l2;
+        var bx = n1x + n2x, by = n1y + n2y;
+        var bl = Math.hypot(bx, by);
+        if (bl < 1e-9) { bx = n1x; by = n1y; bl = 1; }
+        bx /= bl; by /= bl;
+        var cosHalf = Math.max(0.34, (1 + (n1x * n2x + n1y * n2y)) / 2 > 0 ? Math.sqrt((1 + (n1x * n2x + n1y * n2y)) / 2) : 0.34);
+        var d = Math.min(clearance / cosHalf, clearance * 3);
+        offset.push({ x: cv.x + bx * d, y: cv.y + by * d });
+      }
+      finalHull = offset;
+    }
+
+    finalHull.coverage = coverage;
+    finalHull.componentCount = ncomp;
+    finalHull.bridgeCount = bridgeCount;
+    return finalHull;
+  }
+
+  // ============================================================
+  // Viewer — rewritten for v0.2.
+  //
+  // v0.1 bug: the SVG had a viewBox captured from clientWidth/Height at
+  // render time (often before the dialog finished layout), and click math
+  // assumed the drawing filled the element. SVG's default
+  // preserveAspectRatio letterboxes instead, so the effective scale
+  // differed per-axis: clicks were accurate at center and drifted outward
+  // with quadrant-dependent sign — exactly the symptom reported.
+  //
+  // v0.2 removes viewBox entirely (so 1 SVG user unit == 1 CSS pixel,
+  // always exact), renders geometry in raw world (mm) coordinates inside a
+  // single <g>, and maps world<->screen through one explicit affine
+  // transform we fully control:
+  //     screenX = tx + scale * worldX
+  //     screenY = ty - scale * worldY   (Y-up flip)
+  // Zoom (wheel, anchored at the cursor), pan (drag), fit, and click
+  // hit-testing all share this same transform, so they can't disagree.
+  // Stroke widths use vector-effect="non-scaling-stroke"; dash patterns
+  // and marker radii are divided by scale on every transform change so
+  // they stay screen-sized at any zoom.
+  // ============================================================
+  var FIT_PAD = 26;
+
+  function Viewer(svgEl, onSelect) {
+    var self = this;
+    this.svg = svgEl;
+    this.onSelect = onSelect;
+    this.scale = 1;
+    this.tx = 0;
+    this.ty = 0;
+    this.minScale = 1;
+    this.parsed = null;
+    this.overlay = {};
+    this.userTransformed = false;
+
+    svgEl.addEventListener('wheel', function (e) {
+      if (!self.parsed) return;
+      e.preventDefault();
+      var rect = svgEl.getBoundingClientRect();
+      var sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      var w = self.screenToWorld(sx, sy);
+      var factor = e.deltaY < 0 ? 1.25 : 0.8;
+      var ns = self.scale * factor;
+      ns = Math.max(self.minScale * 0.2, Math.min(self.minScale * 500, ns));
+      self.scale = ns;
+      // keep the world point under the cursor fixed while zooming
+      self.tx = sx - ns * w.x;
+      self.ty = sy + ns * w.y;
+      self.userTransformed = true;
+      self.applyTransform();
+      self.scheduleCullRender();
+    }, { passive: false });
+
+    var drag = null;
+    var mouseLongTimer = null;
+    function worldAtClient(cx, cy) {
+      var rect = svgEl.getBoundingClientRect();
+      return self.screenToWorld(cx - rect.left, cy - rect.top);
+    }
+    svgEl.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      var w = worldAtClient(e.clientX, e.clientY);
+      // Grabbing the target marker enters creep-drag mode instead of pan.
+      var mode = (self.hitTarget && self.hitTarget(w)) ? 'target' : 'pan';
+      drag = { x: e.clientX, y: e.clientY, tx: self.tx, ty: self.ty, moved: false, target: e.target, mode: mode, longFired: false };
+      // Hold-left-click (600 ms, no movement) sets the target point —
+      // mouse equivalent of a touch long-press, but with no context menu.
+      if (mode === 'pan' && self.onLongPress) {
+        mouseLongTimer = setTimeout(function () {
+          mouseLongTimer = null;
+          if (drag && !drag.moved) {
+            drag.longFired = true;
+            self.onLongPress(worldAtClient(drag.x, drag.y));
+          }
+        }, 600);
+      }
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      if (mouseLongTimer) { clearTimeout(mouseLongTimer); mouseLongTimer = null; }
+      if (drag.mode === 'target') {
+        if (self.onTargetDrag) self.onTargetDrag(worldAtClient(e.clientX, e.clientY));
+        svgEl.style.cursor = 'move';
+        return;
+      }
+      self.userTransformed = true;
+      self.tx = drag.tx + dx;
+      self.ty = drag.ty + dy;
+      self.applyTransform();
+      self.scheduleCullRender();
+      svgEl.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mouseup', function (e) {
+      if (mouseLongTimer) { clearTimeout(mouseLongTimer); mouseLongTimer = null; }
+      if (!drag) return;
+      var d = drag;
+      drag = null;
+      svgEl.style.cursor = 'crosshair';
+      if (d.mode === 'target' || d.moved || d.longFired || !self.parsed || !self.onSelect) return;
+      var rect = svgEl.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+      var w = self.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+      self.onSelect(w, d.target);
+    });
+
+    // Right-click context menu. ncSender suppresses the NATIVE menu
+    // globally (document-level preventDefault in main.ts) but the event
+    // itself still fires here first, so a custom-rendered menu — the same
+    // pattern as the host's own TransformContextMenu — works fine.
+    svgEl.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!self.parsed || !self.onContext) return;
+      var rect = svgEl.getBoundingClientRect();
+      var w = self.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+      self.onContext(w, e.clientX, e.clientY);
+    });
+
+    // Touch: single-finger drag pans, tap selects, long-press (600 ms,
+    // cancelled by >8 px movement) opens the context menu — mirroring the
+    // host visualizer's own long-press implementation, since suppressing
+    // the native menu also suppresses the OS long-press menu.
+    // Two fingers: pinch to zoom, anchored at the finger midpoint. Because
+    // the anchor world point is recomputed from the pre-update transform at
+    // the CURRENT midpoint each frame, moving both fingers together also
+    // pans — one gesture handles zoom + pan combined.
+    var touch = null;
+    var pinch = null;
+    var LONG_PRESS_MS = 600;
+
+    function touchDist(t1, t2) { return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY); }
+
+    svgEl.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        clearTouch(); // cancel single-finger state + long-press timer
+        var rect0 = svgEl.getBoundingClientRect();
+        pinch = {
+          prevD: touchDist(e.touches[0], e.touches[1]),
+          prevMx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect0.left,
+          prevMy: (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect0.top
+        };
+        return;
+      }
+      if (e.touches.length !== 1 || pinch) { clearTouch(); return; }
+      e.preventDefault();
+      var t = e.touches[0];
+      var tw = worldAtClient(t.clientX, t.clientY);
+      touch = {
+        x: t.clientX, y: t.clientY, tx: self.tx, ty: self.ty,
+        mode: (self.hitTarget && self.hitTarget(tw)) ? 'target' : 'pan',
+        moved: false, menuFired: false,
+        timer: window.setTimeout(function () {
+          if (!touch || touch.moved) return;
+          touch.menuFired = true;
+          if (self.parsed && self.onContext) {
+            var rect = svgEl.getBoundingClientRect();
+            var w = self.screenToWorld(touch.x - rect.left, touch.y - rect.top);
+            self.onContext(w, touch.x, touch.y);
+          }
+        }, LONG_PRESS_MS)
+      };
+    }, { passive: false });
+    svgEl.addEventListener('touchmove', function (e) {
+      if (pinch && e.touches.length === 2) {
+        e.preventDefault();
+        var t1 = e.touches[0], t2 = e.touches[1];
+        var d = touchDist(t1, t2);
+        if (d < 1 || pinch.prevD < 1) { pinch.prevD = d; return; }
+        var rect = svgEl.getBoundingClientRect();
+        var mx = (t1.clientX + t2.clientX) / 2 - rect.left;
+        var my = (t1.clientY + t2.clientY) / 2 - rect.top;
+        // Anchor: the world point that was under the PREVIOUS midpoint must
+        // land under the NEW midpoint. This makes pure finger-spread zoom
+        // about the gesture center, and moving both fingers together pan —
+        // and any combination of the two behaves correctly.
+        var w = self.screenToWorld(pinch.prevMx, pinch.prevMy);
+        var ns = self.scale * (d / pinch.prevD);
+        ns = Math.max(self.minScale * 0.2, Math.min(self.minScale * 500, ns));
+        self.scale = ns;
+        self.tx = mx - ns * w.x;
+        self.ty = my + ns * w.y;
+        self.userTransformed = true;
+        self.applyTransform();
+        self.scheduleCullRender();
+        pinch.prevD = d;
+        pinch.prevMx = mx;
+        pinch.prevMy = my;
+        return;
+      }
+      if (!touch || e.touches.length !== 1) return;
+      e.preventDefault();
+      var t = e.touches[0];
+      var dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+      if (!touch.moved && Math.hypot(dx, dy) < 8) return;
+      touch.moved = true;
+      if (touch.timer) { clearTimeout(touch.timer); touch.timer = null; }
+      if (touch.mode === 'target') {
+        if (self.onTargetDrag) self.onTargetDrag(worldAtClient(t.clientX, t.clientY));
+        return;
+      }
+      self.userTransformed = true;
+      self.tx = touch.tx + dx;
+      self.ty = touch.ty + dy;
+      self.applyTransform();
+      self.scheduleCullRender();
+    }, { passive: false });
+    svgEl.addEventListener('touchend', function (e) {
+      if (pinch) {
+        // Pinch ends when fewer than 2 fingers remain; require a clean
+        // lift before tap/drag resumes so the trailing finger can't select.
+        if (e.touches.length < 2) pinch = null;
+        return;
+      }
+      if (!touch) return;
+      var wasTap = !touch.moved && !touch.menuFired;
+      var tapX = touch.x, tapY = touch.y;
+      clearTouch();
+      if (wasTap && self.parsed && self.onSelect) {
+        var rect = svgEl.getBoundingClientRect();
+        var w = self.screenToWorld(tapX - rect.left, tapY - rect.top);
+        var target = document.elementFromPoint(tapX, tapY);
+        self.onSelect(w, target);
+      }
+    });
+    svgEl.addEventListener('touchcancel', function () { pinch = null; clearTouch(); });
+    function clearTouch() {
+      if (touch && touch.timer) clearTimeout(touch.timer);
+      touch = null;
+    }
+
+    // Refit whenever the map area changes size (dialog opening animation,
+    // window resize, tab becoming visible) — unless the user has already
+    // zoomed/panned, in which case leave their view alone.
+    if (typeof ResizeObserver !== 'undefined') {
+      this._ro = new ResizeObserver(function () {
+        if (self.parsed && !self.userTransformed) self.fit();
+      });
+      this._ro.observe(svgEl.parentElement);
+    }
+  }
+
+  Viewer.prototype.screenToWorld = function (sx, sy) {
+    return { x: (sx - this.tx) / this.scale, y: (this.ty - sy) / this.scale };
+  };
+
+  Viewer.prototype.pxToWorld = function (px) {
+    return px / this.scale;
+  };
+
+  Viewer.prototype.fit = function () {
+    if (!this.parsed) return;
+    var rect = this.svg.getBoundingClientRect();
+    var w = rect.width || 800, h = rect.height || 500;
+    var b = this.parsed.bounds;
+    var bw = Math.max(b.maxX - b.minX, 0.001);
+    var bh = Math.max(b.maxY - b.minY, 0.001);
+    var s = Math.min((w - 2 * FIT_PAD) / bw, (h - 2 * FIT_PAD) / bh);
+    this.minScale = s;
+    this.scale = s;
+    this.tx = (w - s * bw) / 2 - s * b.minX;
+    this.ty = (h - s * bh) / 2 + s * b.maxY;
+    this.userTransformed = false;
+    this._fitted = true;
+    this.applyTransform();
+    this.scheduleCullRender();
+  };
+
+  Viewer.prototype.worldViewport = function (marginFactor) {
+    var w = this.svg.clientWidth || 1, h = this.svg.clientHeight || 1;
+    var a = this.screenToWorld(0, 0), b = this.screenToWorld(w, h);
+    var minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+    var minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+    var mx = (maxX - minX) * (marginFactor - 1) / 2;
+    var my = (maxY - minY) * (marginFactor - 1) / 2;
+    return { minX: minX - mx, maxX: maxX + mx, minY: minY - my, maxY: maxY + my };
+  };
+
+  // Debounced viewport-culled re-render after zoom/pan settles. Only big
+  // files bother: the 60%-margin rect means gentle panning stays covered
+  // until the next settle, and zooming out briefly shows the culled
+  // window before the rebuild fills it back in (140 ms).
+  Viewer.prototype.scheduleCullRender = function () {
+    var self = this;
+    if (this._cullTimer) clearTimeout(this._cullTimer);
+    this._cullTimer = setTimeout(function () {
+      self._cullTimer = null;
+      if (!self.parsed || !self.parsed.segments) return;
+      if (self.parsed.segments.length < 1500) return; // small files never need culling
+      var o = self.overlay || {};
+      o.cullRect = self.worldViewport(1.6);
+      self.render(self.parsed, o);
+    }, 140);
+  };
+
+  Viewer.prototype.applyTransform = function () {
+    // Batch DOM writes into one animation frame: coalesces rapid wheel /
+    // pinch events, and gives iPad Safari a clean paint boundary — without
+    // this (plus the translateZ(0) layer promotion in CSS) iOS would
+    // sometimes skip repainting the SVG during zoom/pan.
+    var self = this;
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(function () {
+      self._raf = null;
+      var g = self.svg.querySelector('g.gn-world');
+      if (!g) return;
+      g.setAttribute('transform',
+        'matrix(' + self.scale + ',0,0,' + (-self.scale) + ',' + self.tx + ',' + self.ty + ')');
+      var s = self.scale;
+      // Keep dashes and markers screen-sized regardless of zoom — but only
+      // rewrite the attributes when the SCALE changed (or after a rebuild):
+      // touching stroke-dasharray on the batched multi-MB rapid path forces
+      // the browser to re-rasterise it, which made pure pans expensive.
+      if (self._lastAttrScale !== s || self._attrsDirty) {
+        self._lastAttrScale = s;
+        self._attrsDirty = false;
+        self.svg.querySelectorAll('[data-dash]').forEach(function (el) {
+          var d = 4 / s;
+          el.setAttribute('stroke-dasharray', d + ',' + d);
+        });
+        self.svg.querySelectorAll('circle[data-r]').forEach(function (el) {
+          el.setAttribute('r', String(parseFloat(el.getAttribute('data-r')) / s));
+        });
+        var crossLen = 14 / s;
+        self.svg.querySelectorAll('line[data-crossline]').forEach(function (el) {
+          if (el.getAttribute('data-crossline') === 'x') {
+            el.setAttribute('x1', -crossLen); el.setAttribute('x2', crossLen);
+            el.setAttribute('y1', 0); el.setAttribute('y2', 0);
+          } else {
+            el.setAttribute('x1', 0); el.setAttribute('x2', 0);
+            el.setAttribute('y1', -crossLen); el.setAttribute('y2', crossLen);
+          }
+        });
+      }
+      // Nudge WebKit into compositing the new frame.
+      void self.svg.getBoundingClientRect();
+    });
+  };
+
+  // Surgical target-marker update: repositions the existing ring/dot
+  // instead of rebuilding the whole SVG. Rebuilding on every creep-slider
+  // tick caused visible strobing/flashing on Windows Chrome.
+  // Live spindle crosshair: a <g> translated to the work position with two
+  // screen-sized cross lines and a ring. Created/moved surgically (no scene
+  // rebuild); re-created after any innerHTML rebuild by the next poll tick.
+  Viewer.prototype.updateSpindle = function (pt) {
+    var world = this.svg.querySelector('.gn-world');
+    if (!world) return;
+    var g = world.querySelector('[data-spindle]');
+    if (!pt) {
+      if (g) g.remove();
+      return;
+    }
+    if (!g) {
+      g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('data-spindle', '1');
+      var mk = function (tag, attrs) {
+        var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+        g.appendChild(el);
+        return el;
+      };
+      mk('line', { 'data-crossline': 'x', stroke: 'rgba(255,255,255,0.75)', 'stroke-width': '1.4', 'vector-effect': 'non-scaling-stroke' });
+      mk('line', { 'data-crossline': 'y', stroke: 'rgba(255,255,255,0.75)', 'stroke-width': '1.4', 'vector-effect': 'non-scaling-stroke' });
+      mk('circle', { 'data-r': '6', r: '1', fill: 'none', stroke: 'rgba(255,255,255,0.75)', 'stroke-width': '1.4', 'vector-effect': 'non-scaling-stroke' });
+      world.appendChild(g);
+      this._attrsDirty = true;
+      this.applyTransform();
+    }
+    g.setAttribute('transform', 'translate(' + pt.x.toFixed(4) + ',' + pt.y.toFixed(4) + ')');
+  };
+
+  Viewer.prototype.updateOverlayPoint = function (pt) {
+    this._attrsDirty = true;
+    var g = this.svg.querySelector('g.gn-world');
+    if (!g) return;
+    var ring = g.querySelector('circle.gn-target-ring');
+    var dot = g.querySelector('circle.gn-target-dot');
+    if (!pt) {
+      if (ring) ring.remove();
+      if (dot) dot.remove();
+      return;
+    }
+    var NS = 'http://www.w3.org/2000/svg';
+    if (!ring) {
+      ring = document.createElementNS(NS, 'circle');
+      ring.setAttribute('class', 'gn-target-ring');
+      ring.setAttribute('data-r', '11');
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', 'var(--gn-select)');
+      ring.setAttribute('stroke-width', '2.5');
+      ring.setAttribute('vector-effect', 'non-scaling-stroke');
+      g.appendChild(ring);
+    }
+    if (!dot) {
+      dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('class', 'gn-target-dot');
+      dot.setAttribute('data-r', '4.5');
+      dot.setAttribute('fill', 'var(--gn-select)');
+      dot.setAttribute('stroke', '#000');
+      dot.setAttribute('stroke-width', '1');
+      dot.setAttribute('vector-effect', 'non-scaling-stroke');
+      g.appendChild(dot);
+    }
+    var s = this.scale || 1;
+    [ring, dot].forEach(function (el) {
+      el.setAttribute('cx', pt.x.toFixed(4));
+      el.setAttribute('cy', pt.y.toFixed(4));
+      el.setAttribute('r', String(parseFloat(el.getAttribute('data-r')) / s));
+    });
+  };
+
+  Viewer.prototype.render = function (parsed, overlay) {
+    var firstRender = this.parsed === null;
+    this.parsed = parsed;
+    this.overlay = overlay || {};
+    var o = this.overlay;
+    var parts = ['<g class="gn-world">'];
+
+    var vis = o.layerVis || {};
+    function layerOn(k) { return vis[k] !== false; }
+
+    // Performance model (v0.23): batched paths (few DOM nodes regardless
+    // of file size) + a NUMERIC per-file cache (bboxes only, no strings) +
+    // scale-adaptive vertex decimation. At fit zoom on an 840k-segment
+    // relief carve most moves are sub-pixel, so consecutive same-style
+    // segments are chained into polylines and vertices closer than ~0.6
+    // screen px to the last emitted vertex are skipped; deep zooms rely on
+    // viewport culling instead (debounced rebuild after zoom/pan). Chain
+    // continuity uses exact float equality, which holds because the parser
+    // threads the same coordinate values from one segment to the next.
+    if (this._segCacheFor !== parsed) {
+      this._segCacheFor = parsed;
+      this._fitted = false;
+      // Flat typed array (minX,minY,maxX,maxY per segment): ~10x faster to
+      // build than 840k cache objects and a fraction of the memory.
+      var nSegs = parsed.segments.length;
+      var box = new Float64Array(nSegs * 4);
+      for (var ci0 = 0; ci0 < nSegs; ci0++) {
+        var s0 = parsed.segments[ci0];
+        var mnX = s0.x0 < s0.x1 ? s0.x0 : s0.x1, mxX = s0.x0 < s0.x1 ? s0.x1 : s0.x0;
+        var mnY = s0.y0 < s0.y1 ? s0.y0 : s0.y1, mxY = s0.y0 < s0.y1 ? s0.y1 : s0.y0;
+        if (s0.points) {
+          for (var pi0 = 0; pi0 < s0.points.length; pi0++) {
+            var pp = s0.points[pi0];
+            if (pp.x < mnX) mnX = pp.x; else if (pp.x > mxX) mxX = pp.x;
+            if (pp.y < mnY) mnY = pp.y; else if (pp.y > mxY) mxY = pp.y;
+          }
+        }
+        var bo = ci0 * 4;
+        box[bo] = mnX; box[bo + 1] = mnY; box[bo + 2] = mxX; box[bo + 3] = mxY;
+      }
+      this._segBox = box;
+    }
+
+    var effScale = this.scale;
+    if (!this.userTransformed && !this._fitted) {
+      // First paint happens before fit(); estimate the fit scale so the
+      // decimation tolerance is right from the start.
+      var rect0 = this.svg.getBoundingClientRect();
+      var ew = rect0.width || 1200, eh = rect0.height || 700;
+      var eb = parsed.bounds;
+      effScale = Math.min(ew / Math.max(eb.maxX - eb.minX, 0.001), eh / Math.max(eb.maxY - eb.minY, 0.001));
+    }
+    var tol = 0.6 / Math.max(effScale, 1e-9);
+    var tol2 = tol * tol;
+    // Coordinate precision scales with the decimation tolerance: no point
+    // writing 4 decimals when vertices closer than 0.1 are being skipped.
+    var DEC = tol >= 0.05 ? 2 : (tol >= 0.005 ? 3 : 4);
+    var cull = o.cullRect || null;
+    // Normalise a cull rect that covers the whole file to 'ALL' so panning
+    // at fit zoom doesn't count as a scene change.
+    var cullKey = 'ALL';
+    if (cull) {
+      var pb = parsed.bounds;
+      if (cull.minX > pb.minX || cull.minY > pb.minY || cull.maxX < pb.maxX || cull.maxY < pb.maxY) {
+        cullKey = cull.minX.toFixed(2) + ',' + cull.minY.toFixed(2) + ',' + cull.maxX.toFixed(2) + ',' + cull.maxY.toFixed(2);
+      }
+    }
+    // Scene signature: if nothing that affects the drawn content changed,
+    // skip the innerHTML rebuild entirely (a rebuild on a big file paints a
+    // blank frame while multi-MB paths re-rasterise) and just re-apply the
+    // transform.
+    var sig = [parsed.totalLines, cullKey, DEC, Math.round(Math.log(Math.max(effScale, 1e-9)) * 6),
+      o.selectedLine, JSON.stringify(o.layerVis || {}), o.traced ? 1 : 0, o.tracedIncludeRapids ? 1 : 0,
+      o.hull ? o.hull.length : 0,
+      o.selectedPoint ? o.selectedPoint.x.toFixed(3) + ',' + o.selectedPoint.y.toFixed(3) : '-',
+      o.jobStart ? 1 : 0, o.jobEnd ? 1 : 0].join('|');
+    if (sig === this._sceneSig && !firstRender) {
+      this.overlay = o;
+      this.applyTransform();
+      return;
+    }
+    this._sceneSig = sig;
+    var multiTool = parsed.tools && parsed.tools.length > 0;
+    var toolColorFn = o.toolColor || function () { return 'var(--gn-feed)'; };
+
+    var groups = {};
+    var groupOrder = [];
+    function groupGet(key, color, dashed, opacity) {
+      var g = groups[key];
+      if (!g) {
+        g = groups[key] = { d: '', lx: NaN, ly: NaN, ex: NaN, ey: NaN, color: color, dashed: dashed, opacity: opacity };
+        groupOrder.push(key);
+      }
+      return g;
+    }
+    function emitPoint(g, x, y) {
+      g.ex = x; g.ey = y;
+      var dx = x - g.lx, dy = y - g.ly;
+      if (dx * dx + dy * dy >= tol2) {
+        g.d += 'L' + x.toFixed(DEC) + ',' + y.toFixed(DEC);
+        g.lx = x; g.ly = y;
+      }
+    }
+
+    var hlSeg = null;
+    var movesOverlay = parsed.maxS > 0 && layerOn('moves');
+    var segsAll = parsed.segments;
+    var boxArr = this._segBox;
+    for (var ci = 0; ci < segsAll.length; ci++) {
+      var seg = segsAll[ci];
+      var bo2 = ci * 4;
+      if (o.selectedLine === seg.line && layerOn('selline')) hlSeg = seg; // never culled
+      var typeOn;
+      if (seg.type === 'G0') typeOn = layerOn('rapid');
+      else if (multiTool) typeOn = layerOn('tool:' + (seg.tool === null || seg.tool === undefined ? '_' : seg.tool));
+      else typeOn = layerOn('feed');
+      if (!typeOn) continue;
+      if (cull && (boxArr[bo2 + 2] < cull.minX || boxArr[bo2] > cull.maxX || boxArr[bo2 + 3] < cull.minY || boxArr[bo2 + 1] > cull.maxY)) continue;
+      var traced = o.traced && (seg.type !== 'G0' || o.tracedIncludeRapids);
+      var g;
+      if (seg.type === 'G0') {
+        g = traced ? groupGet('r_t', 'var(--gn-traced)', true) : groupGet('r', 'var(--gn-rapid)', true);
+      } else if (traced) {
+        g = groupGet('f_t', 'var(--gn-traced)', false);
+      } else {
+        // Power (S) always quantizes into an opacity bucket. Depth (Z), when
+        // present, lightens/darkens each segment's OWN color (the tool hue
+        // in multi-tool files, teal otherwise) rather than substituting a
+        // separate hue — so which tool AND which pass are both visible at
+        // once instead of one overriding the other.
+        var sBucket = sOpacityBucket(parsed, seg.s || 0);
+        var opacity = sBucket / S_OPACITY_BUCKETS;
+        var tk = seg.tool === null || seg.tool === undefined ? '_' : seg.tool;
+        // toolHex is always a concrete, blend-able color (never the
+        // 'var(--gn-feed)' CSS reference) so depthShadedColor's arithmetic
+        // works the same regardless of tool count.
+        var toolHex = (multiTool && tk !== '_') ? toolColorFn(seg.tool) : '#4ec9b0';
+        var zOn = zShadeEnabled(parsed);
+        if (zOn) {
+          var zIdx = parsed.zLevels.indexOf(Number(seg.z1.toFixed(3)));
+          var key = 'f_' + (multiTool ? tk : 'x') + '_z' + zIdx + '_s' + sBucket;
+          g = groupGet(key, depthShadedColor(toolHex, parsed.zLevels, seg.z1), false, opacity);
+        } else if (multiTool) {
+          g = groupGet('f_' + tk + '_s' + sBucket, tk === '_' ? 'var(--gn-feed)' : toolHex, false, opacity);
+        } else {
+          g = groupGet('f_s' + sBucket, 'var(--gn-feed)', false, opacity);
+        }
+      }
+      // Moves overlay: with power shading active, low/zero-S moves render
+      // at near-zero opacity and the engraved areas fuse into an image —
+      // the individual toolpath lines vanish. This extra hairline pass
+      // draws EVERY visible move thin and faint ON TOP of the shading, so
+      // the graphic and the clickable moves coexist. Toggled by the
+      // "Moves" legend item; only built when the file has S words.
+      if (movesOverlay && seg.type !== 'G0') {
+        var mg = groupGet('mv', '#c8d2dc', false, 0.35);
+        if (mg.ex !== seg.x0 || mg.ey !== seg.y0) {
+          if (mg.d) mg.d += 'L' + mg.ex.toFixed(DEC) + ',' + mg.ey.toFixed(DEC);
+          mg.d += 'M' + seg.x0.toFixed(DEC) + ',' + seg.y0.toFixed(DEC);
+          mg.lx = seg.x0; mg.ly = seg.y0; mg.ex = seg.x0; mg.ey = seg.y0;
+        }
+        if (seg.points) {
+          for (var mp = 0; mp < seg.points.length; mp++) emitPoint(mg, seg.points[mp].x, seg.points[mp].y);
+        }
+        emitPoint(mg, seg.x1, seg.y1);
+      }
+      if (g.ex !== seg.x0 || g.ey !== seg.y0) {
+        // chain break: close the previous chain at its true endpoint, then move
+        if (g.d && (g.ex !== g.lx || g.ey !== g.ly)) g.d += 'L' + g.ex.toFixed(DEC) + ',' + g.ey.toFixed(DEC);
+        g.d += 'M' + seg.x0.toFixed(DEC) + ',' + seg.y0.toFixed(DEC);
+        g.lx = seg.x0; g.ly = seg.y0; g.ex = seg.x0; g.ey = seg.y0;
+      }
+      if (seg.points) {
+        for (var pi = 0; pi < seg.points.length; pi++) emitPoint(g, seg.points[pi].x, seg.points[pi].y);
+        emitPoint(g, seg.x1, seg.y1);
+      } else {
+        emitPoint(g, seg.x1, seg.y1);
+      }
+    }
+    // traced groups render first (underneath), then feeds, then rapids,
+    // then the moves hairline overlay on top of everything
+    groupOrder.sort(function (a, b) {
+      function rank(k) { return k === 'f_t' || k === 'r_t' ? 0 : (k === 'mv' ? 3 : (k.charAt(0) === 'f' ? 1 : 2)); }
+      return rank(a) - rank(b);
+    });
+    for (var gi = 0; gi < groupOrder.length; gi++) {
+      var gk = groups[groupOrder[gi]];
+      if (!gk.d) continue;
+      if (gk.ex !== gk.lx || gk.ey !== gk.ly) gk.d += 'L' + gk.ex.toFixed(DEC) + ',' + gk.ey.toFixed(DEC);
+      var opAttr = (gk.opacity !== undefined && gk.opacity < 1) ? ' stroke-opacity="' + gk.opacity.toFixed(3) + '"' : '';
+      var swAttr = groupOrder[gi] === 'mv' ? '0.7' : '1.1';
+      parts.push('<path d="' + gk.d + '" stroke="' + gk.color + '" stroke-width="' + swAttr + '" fill="none" vector-effect="non-scaling-stroke"' + (gk.dashed ? ' data-dash="1"' : '') + opAttr + '/>');
+    }
+    if (hlSeg) {
+      // Selected segment on top, full detail: soft glow underlay + accent stroke.
+      var hpts = hlSeg.points ? [{ x: hlSeg.x0, y: hlSeg.y0 }].concat(hlSeg.points, [{ x: hlSeg.x1, y: hlSeg.y1 }]) : [{ x: hlSeg.x0, y: hlSeg.y0 }, { x: hlSeg.x1, y: hlSeg.y1 }];
+      var hlD = hpts.map(function (p, i2) { return (i2 === 0 ? 'M' : 'L') + p.x.toFixed(4) + ',' + p.y.toFixed(4); }).join('');
+      parts.push('<path d="' + hlD + '" stroke="var(--gn-accent)" stroke-width="8" opacity="0.30" fill="none" vector-effect="non-scaling-stroke"/>');
+      parts.push('<path d="' + hlD + '" stroke="var(--gn-accent)" stroke-width="2.5" fill="none" vector-effect="non-scaling-stroke"/>');
+    }
+
+    if (o.hull && layerOn('contour')) {
+      var hd = o.hull.map(function (p, i) {
+        return (i === 0 ? 'M' : 'L') + p.x.toFixed(4) + ',' + p.y.toFixed(4);
+      }).join(' ') + ' Z';
+      // Bold stroke, no per-vertex dots: the outline reads as one clear
+      // shape distinct from toolpath lines. Vertex SNAPPING still works
+      // (right-click / long-press near the outline) — only the visual
+      // bullets are gone.
+      parts.push('<path d="' + hd + '" stroke="var(--gn-hull)" stroke-width="3.5" fill="rgba(197,134,192,0.08)" vector-effect="non-scaling-stroke"/>');
+    }
+
+    if (o.jobStart && layerOn('jobstart')) {
+      parts.push('<circle cx="' + o.jobStart.x.toFixed(4) + '" cy="' + o.jobStart.y.toFixed(4) +
+        '" data-r="4.5" r="1" fill="var(--gn-jobstart)" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>');
+    }
+    if (o.jobEnd && layerOn('jobend')) {
+      parts.push('<circle cx="' + o.jobEnd.x.toFixed(4) + '" cy="' + o.jobEnd.y.toFixed(4) +
+        '" data-r="4.5" r="1" fill="var(--gn-danger)" stroke="#fff" stroke-width="1" vector-effect="non-scaling-stroke"/>');
+    }
+
+    if (o.selectedPoint && layerOn('selpoint')) {
+      // Bright ring + solid dot; classed so updateOverlayPoint can move
+      // them without a full re-render (the strobing fix).
+      parts.push('<circle class="gn-target-ring" cx="' + o.selectedPoint.x.toFixed(4) + '" cy="' + o.selectedPoint.y.toFixed(4) +
+        '" data-r="11" r="1" fill="none" stroke="var(--gn-select)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
+      parts.push('<circle class="gn-target-dot" cx="' + o.selectedPoint.x.toFixed(4) + '" cy="' + o.selectedPoint.y.toFixed(4) +
+        '" data-r="4.5" r="1" fill="var(--gn-select)" stroke="#000" stroke-width="1" vector-effect="non-scaling-stroke"/>');
+    }
+
+    parts.push('</g>');
+    this.svg.innerHTML = parts.join('');
+    this._attrsDirty = true;
+
+    if (firstRender || (!this.userTransformed && !this._fitted)) {
+      // Defer one frame so the dialog's layout has settled and
+      // getBoundingClientRect reports the real size. _fitted guards the
+      // cull-refine render from re-fitting: fit -> scheduleCullRender ->
+      // render -> fit was an infinite rebuild loop that strobed the whole
+      // map on large files (each cycle rebuilt a multi-MB SVG, painting a
+      // blank frame while the new paths rasterized).
+      var self = this;
+      requestAnimationFrame(function () { self.fit(); });
+    } else {
+      this.applyTransform();
+    }
+  };
+
+  // ============================================================
+  // App state + wiring (single unified view as of v0.12)
+  // ============================================================
+  var gcodeText = null;
+  var parsed = null;
+  var selectedSegment = null;
+  var hull = null;
+  var appSettings = null;
+  var loadStatus = '';
+  // The yellow target marker always shows the CURRENT target: the creep
+  // position on the selected line, a contour vertex, or a snapped point
+  // from the context menu. "Rapid to Point" goes wherever it is.
+  var targetOverride = null;
+
+  // ---- Styled confirmation (ncSender-dialog look) ----
+  var confirmResolve = null;
+  function showConfirm(title, bodyHtml, okLabel) {
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+      document.getElementById('gn-confirm-title').textContent = title;
+      document.getElementById('gn-confirm-body').innerHTML = bodyHtml;
+      document.getElementById('gn-confirm-ok').textContent = okLabel || 'Confirm';
+      document.getElementById('gn-confirm-overlay').style.display = 'flex';
+    });
+  }
+  function closeConfirm(result) {
+    document.getElementById('gn-confirm-overlay').style.display = 'none';
+    if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+  }
+  document.getElementById('gn-confirm-ok').addEventListener('click', function () { closeConfirm(true); });
+  document.getElementById('gn-confirm-abort').addEventListener('click', function () { closeConfirm(false); });
+  document.getElementById('gn-confirm-overlay').addEventListener('click', function (e) {
+    if (e.target === this) closeConfirm(false);
+  });
+
+  // First-motion gate: the confirmation card appears only before the FIRST
+  // motion command of the session (trace, rapid to point, retract);
+  // afterwards buttons act immediately.
+  var motionWarned = false;
+  function confirmMotion(title, bodyHtml, okLabel) {
+    if (motionWarned) return Promise.resolve(true);
+    var note = '<div class="gn-note">This confirmation appears only before your first motion command \u2014 after this, these buttons act immediately.</div>';
+    return showConfirm(title, bodyHtml + note, okLabel).then(function (ok) {
+      if (ok) motionWarned = true;
+      return ok;
+    });
+  }
+
+  // ---- Context menu ----
+  var ctxMenuEl = document.getElementById('gn-ctx-menu');
+
+  function hideCtxMenu() { ctxMenuEl.style.display = 'none'; }
+  document.addEventListener('mousedown', function (e) {
+    if (!ctxMenuEl.contains(e.target)) hideCtxMenu();
+  }, true);
+  document.addEventListener('touchstart', function (e) {
+    if (!ctxMenuEl.contains(e.target)) hideCtxMenu();
+  }, true);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideCtxMenu(); });
+  window.addEventListener('wheel', hideCtxMenu, true);
+
+  function showCtxMenu(clientX, clientY, world, items) {
+    ctxMenuEl.innerHTML = '';
+    var coords = document.createElement('div');
+    coords.className = 'gn-ctx-coords';
+    coords.textContent = 'X' + world.x.toFixed(3) + '  Y' + world.y.toFixed(3);
+    ctxMenuEl.appendChild(coords);
+    items.forEach(function (item) {
+      var el = document.createElement('div');
+      el.className = 'gn-ctx-item';
+      el.textContent = item.label;
+      el.addEventListener('click', function () {
+        hideCtxMenu();
+        item.action();
+      });
+      ctxMenuEl.appendChild(el);
+    });
+    ctxMenuEl.style.display = 'block';
+    var mw = ctxMenuEl.offsetWidth, mh = ctxMenuEl.offsetHeight;
+    var x = Math.min(clientX, window.innerWidth - mw - 8);
+    var y = Math.min(clientY, window.innerHeight - mh - 8);
+    ctxMenuEl.style.left = x + 'px';
+    ctxMenuEl.style.top = y + 'px';
+  }
+
+  // ---- Viewer ----
+  var viewer = new Viewer(document.getElementById('gn-line-svg'), function (world, target) {
+    if (!parsed) return;
+    // (Vertex dots removed in v0.21 — vertex targeting now goes through the
+    // right-click / long-press snap, which still snaps to hull vertices.)
+    var hit = findNearestSegment(viewParsed(), world.x, world.y, visibleSegFilter);
+    if (!hit.segment) return;
+    if (hit.dist > viewer.pxToWorld(14)) return;
+    selectLine(hit.segment);
+  });
+
+  document.getElementById('gn-line-fit').addEventListener('click', function () { viewer.fit(); });
+
+  function renderMain() {
+    if (!parsed) return;
+    var vp = viewParsed();
+    var selPoint = targetOverride ||
+      (selectedSegment ? creepPoint(selectedSegment, creepFraction()) : null);
+    var first = vp.segments[0] || null;
+    var last = vp.segments[vp.segments.length - 1] || null;
+    viewer.render(vp, {
+      selectedLine: selectedSegment ? selectedSegment.line : null,
+      selectedPoint: selPoint,
+      hull: viewMode === 'rotary' ? null : hull,
+      jobStart: first ? { x: first.x0, y: first.y0 } : null,
+      jobEnd: last ? { x: last.x1, y: last.y1 } : null,
+      layerVis: layerVis,
+      toolColor: toolColor
+    });
+    if (typeof syncSpindleMarker === 'function') syncSpindleMarker();
+    updateLineAnalysis();
+  }
+
+  function selectLine(segment) {
+    selectedSegment = segment;
+    document.getElementById('gn-line-input').value = segment.line;
+    document.getElementById('gn-creep-slider').value = 0;
+    targetOverride = null;
+    renderMain();
+  }
+
+  function creepFraction() {
+    return parseFloat(document.getElementById('gn-creep-slider').value) / 100;
+  }
+
+  function creepPoint(seg, t) {
+    if (seg.points) {
+      var pts = [{ x: seg.x0, y: seg.y0 }].concat(seg.points);
+      var idx = Math.min(pts.length - 1, Math.round(t * (pts.length - 1)));
+      return pts[idx];
+    }
+    return { x: seg.x0 + (seg.x1 - seg.x0) * t, y: seg.y0 + (seg.y1 - seg.y0) * t };
+  }
+
+  // Fraction (0..1) along a segment's polyline nearest to a world point —
+  // by arc length, so arcs behave the same as straight lines.
+  function fractionAlongSegment(seg, pt) {
+    var pts = seg.points
+      ? [{ x: seg.x0, y: seg.y0 }].concat(seg.points)
+      : [{ x: seg.x0, y: seg.y0 }, { x: seg.x1, y: seg.y1 }];
+    var total = 0, lens = [];
+    for (var i = 0; i < pts.length - 1; i++) {
+      var L = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+      lens.push(L);
+      total += L;
+    }
+    if (total === 0) return 0;
+    var bestD = Infinity, bestLen = 0, acc = 0;
+    for (var j = 0; j < pts.length - 1; j++) {
+      var ax = pts[j].x, ay = pts[j].y, bx = pts[j + 1].x, by = pts[j + 1].y;
+      var dx = bx - ax, dy = by - ay;
+      var len2 = dx * dx + dy * dy;
+      var t = len2 === 0 ? 0 : ((pt.x - ax) * dx + (pt.y - ay) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      var d = Math.hypot(pt.x - (ax + t * dx), pt.y - (ay + t * dy));
+      if (d < bestD) { bestD = d; bestLen = acc + t * lens[j]; }
+      acc += lens[j];
+    }
+    return bestLen / total;
+  }
+
+  // ---- Point targeting (right-click, hold-left-click, touch long-press) ----
+  // Snap the point (hull vertices first, then toolpath), then: if it lies on
+  // a motion segment, SELECT that segment and sync the creep slider to the
+  // point's fraction along it — so sliding afterwards continues from the
+  // point instead of jumping back to the line start. Free-space points
+  // stay as a plain target override.
+  function visibleSegFilter(s) {
+    if (s.type === 'G0') return layerVis.rapid;
+    if (parsed && parsed.tools && parsed.tools.length > 0) {
+      var key = 'tool:' + (s.tool === null || s.tool === undefined ? '_' : s.tool);
+      return layerVis[key] !== false;
+    }
+    return layerVis.feed;
+  }
+
+  function setPointTarget(world) {
+    var polys = [];
+    var hullPolyIndex = -1;
+    if (hull && hull.length >= 3 && layerVis.contour) {
+      hullPolyIndex = 0;
+      polys.push(hull.concat([hull[0]]));
+    }
+    parsed.segments.forEach(function (s) {
+      if (!visibleSegFilter(s)) return;
+      polys.push(s.points ? [{ x: s.x0, y: s.y0 }].concat(s.points) : [{ x: s.x0, y: s.y0 }, { x: s.x1, y: s.y1 }]);
+    });
+    var snap = snapToPolylines(world, polys, viewer.pxToWorld(14), viewer.pxToWorld(20));
+    var snapVertexNo = -1;
+    if (snap.kind === 'vertex' && snap.polyIndex === hullPolyIndex && hull) {
+      snapVertexNo = snap.vIndex === hull.length ? 0 : snap.vIndex;
+    }
+
+    var pt = { x: snap.x, y: snap.y };
+    var hit = findNearestSegment(viewParsed(), pt.x, pt.y, visibleSegFilter);
+    if (hit.segment && hit.dist <= viewer.pxToWorld(3)) {
+      // Point is on the toolpath: select its segment and sync the slider.
+      selectedSegment = hit.segment;
+      document.getElementById('gn-line-input').value = hit.segment.line;
+      var f = fractionAlongSegment(hit.segment, pt);
+      document.getElementById('gn-creep-slider').value = Math.round(f * 100);
+    }
+    targetOverride = pt; // exact snapped point (slider is the rounded echo)
+    renderMain();
+    snap.vertexNo = snapVertexNo;
+    return snap;
+  }
+
+  viewer.onContext = function (world, cx, cy) {
+    var snap = setPointTarget(world);
+    var items = [];
+    var rapidLabel = snap.vertexNo >= 0 ? 'Rapid to vertex #' + (snap.vertexNo + 1)
+      : snap.kind === 'vertex' ? 'Rapid to vertex (snapped)'
+      : snap.kind === 'edge' ? 'Rapid to edge point (snapped)'
+      : 'Rapid to this point';
+    items.push({ label: rapidLabel, action: function () {
+      confirmMotion('Rapid to Point',
+        'The machine will move to <b>X' + snap.x.toFixed(3) + ' Y' + snap.y.toFixed(3) + '</b>' +
+        (document.getElementById('gn-raisez').checked ? ', raising Z to safe height first.' : ' <b>without raising Z first</b>.'),
+        'Move')
+        .then(function (ok) {
+          if (!ok) return;
+          return sendCommand(rapidToPointCmd({ x: snap.x, y: snap.y }), rapidLabel + ' X' + snap.x.toFixed(3) + ' Y' + snap.y.toFixed(3) + ' (G-code Navigator)');
+        })
+        .catch(function (err) { document.getElementById('gn-line-error').textContent = err.message; });
+    }});
+    if (selectedSegment) {
+      items.push({ label: 'Start from line ' + selectedSegment.line + '\u2026', action: function () {
+        sflOpen();
+      }});
+    }
+    items.push({ label: 'Fit view', action: function () { viewer.fit(); } });
+    showCtxMenu(cx, cy, { x: snap.x, y: snap.y }, items);
+  };
+
+  // Hold-left-click: set the point, no menu (mouse twin of touch long-press).
+  viewer.onLongPress = function (world) {
+    setPointTarget(world);
+  };
+
+  // Dragging the target marker creeps along the selected segment — same as
+  // the slider, mouse or touch. Uses the surgical marker update, not a full
+  // re-render, so there is no flashing.
+  viewer.hitTarget = function (world) {
+    if (!layerVis.selpoint) return false;
+    if (!parsed || !selectedSegment) return false;
+    var pt = targetOverride || creepPoint(selectedSegment, creepFraction());
+    if (!pt) return false;
+    return Math.hypot(world.x - pt.x, world.y - pt.y) <= viewer.pxToWorld(16);
+  };
+  viewer.onTargetDrag = function (world) {
+    if (!selectedSegment) return;
+    var f = fractionAlongSegment(selectedSegment, world);
+    document.getElementById('gn-creep-slider').value = Math.round(f * 100);
+    var pt = creepPoint(selectedSegment, f);
+    targetOverride = pt;
+    viewer.updateOverlayPoint(layerVis.selpoint ? pt : null);
+    updateLineAnalysis();
+  };
+
+  // ---- Load ----
+  var AUTO_CONTOUR_MAX_SEGMENTS = 20000;
+  var contourDeferred = false;
+
+  function loadGcodeAndSettings() {
+    setStatus('Loading current G-code file and settings\u2026');
+    return Promise.all([getCurrentGcodeText(), getSettings().catch(function () { return {}; })])
+      .then(function (results) {
+        gcodeText = results[0];
+        appSettings = results[1] || {};
+        return parseGcodeAsync(gcodeText, function (done, total) {
+          if (total > 200000) {
+            setStatus('Parsing ' + done.toLocaleString() + ' / ' + total.toLocaleString() + ' lines (' + Math.round(done / total * 100) + '%)\u2026');
+          }
+        });
+      })
+      .then(function (result) {
+        parsed = result;
+        fileUnitsScale = parsed.units === 'G20' ? 25.4 : 1;
+        rotaryParsedCache = null;
+        var tabsEl = document.getElementById('gn-view-tabs');
+        tabsEl.style.display = parsed.hasRotary ? 'flex' : 'none';
+        if (parsed.hasRotary && viewMode !== 'rotary') {
+          // rotary files render as a flat line in XY — open unwrapped
+          setTimeout(function () { setViewMode('rotary'); }, 0);
+        } else if (!parsed.hasRotary && viewMode === 'rotary') {
+          setViewMode('xy');
+        }
+        loadStatus = 'Loaded ' + parsed.totalLines + ' lines, ' + parsed.segments.length + ' motion segments. Safe Z Retract Height: ' +
+          (appSettings.safeZHeight !== undefined ? appSettings.safeZHeight : -5) + ' mm (app setting).';
+        rebuildLegend();
+        // Select the first motion segment so the map highlight and LINE
+        // ANALYSIS panel are populated immediately at open.
+        if (parsed.segments.length) {
+          selectLine(parsed.segments[0]);
+        } else {
+          renderMain();
+        }
+        // On big files the contour is NOT computed automatically: a
+        // "Compute Contour Outline" affordance appears in the contour box
+        // instead, and computation runs as a cancellable background job
+        // with a progress bar. Small files start the job automatically —
+        // same non-blocking path, so the map never flashes mid-compute.
+        hull = null;
+        if (parsed.segments.length > AUTO_CONTOUR_MAX_SEGMENTS) {
+          contourDeferred = true;
+          setContourUI('pending');
+          setStatus(loadStatus);
+        } else if (parsed.hasRotary) {
+          // rotary files collapse to a line in XY — a contour is meaningless
+          // and the machinery is hidden in this view; don't compute one
+          contourDeferred = false;
+          setStatus(loadStatus);
+        } else {
+          contourDeferred = false;
+          setStatus(loadStatus);
+          startContourJob();
+        }
+      })
+      .catch(function (err) {
+        setStatus(err.message || String(err), true);
+      });
+  }
+
+  function ensureContour(cb) {
+    if (hull || !parsed) { if (cb) cb(); return; }
+    startContourJob(cb);
+  }
+
+  // ---- Target line: auto-analyze ----
+  document.getElementById('gn-preset-z-toggle').addEventListener('change', function () {
+    document.getElementById('gn-preset-z-field').style.display = this.checked ? '' : 'none';
+  });
+
+  function currentPresetZ() {
+    var enabled = document.getElementById('gn-preset-z-toggle').checked;
+    if (!enabled) return null;
+    var v = parseFloat(document.getElementById('gn-preset-z-input').value);
+    return isNaN(v) ? null : v;
+  }
+
+  function safeZValue() {
+    var preset = currentPresetZ();
+    if (preset !== null) return preset;
+    return (appSettings && appSettings.safeZHeight !== undefined) ? appSettings.safeZHeight : -5;
+  }
+
+  // Coordinates we send come straight from the loaded file, so motion
+  // commands carry the file's own units mode (G20/G21, when declared) plus
+  // G90 absolute. Safe-Z retracts use G21 explicitly because ncSender's
+  // safeZHeight app setting is always mm.
+  function motionPrefix() {
+    var u = (parsed && parsed.units) ? parsed.units + ' ' : '';
+    return u + 'G90 ';
+  }
+
+  // LINE ANALYSIS (client-side, per the mockup): raw G-code of the selected
+  // line, start XY, the currently targeted point XY (live — follows the
+  // creep slider, a targeted vertex, or a snapped map-menu point), end XY.
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function copyChip(text) {
+    return '<span class="gn-copy" data-copy="' + escHtml(text) + '">' + escHtml(text) + '</span>';
+  }
+
+  function updateLineAnalysis() {
+    var box = document.getElementById('gn-analysis-box');
+    if (!selectedSegment || !gcodeText) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    var raw = (gcodeText.split('\n')[selectedSegment.line - 1] || '').trim();
+    var pt = targetOverride || creepPoint(selectedSegment, creepFraction());
+    document.getElementById('gn-an-gcode').innerHTML = 'G-code: ' + (raw ? copyChip(raw) : '(line ' + selectedSegment.line + ')');
+    var sSeg = selectedSegment;
+    if (sSeg.aSrc) {
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.aSrc.x0.toFixed(3) + ' A' + sSeg.aSrc.a0.toFixed(3));
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3));
+    } else {
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.x0.toFixed(3) + ' Y' + sSeg.y0.toFixed(3));
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3));
+    }
+    document.getElementById('gn-an-end').innerHTML = sSeg.aSrc
+      ? 'End: ' + copyChip('X' + sSeg.aSrc.x1.toFixed(3) + ' A' + sSeg.aSrc.a1.toFixed(3))
+      : 'End: ' + copyChip('X' + sSeg.x1.toFixed(3) + ' Y' + sSeg.y1.toFixed(3));
+  }
+
+  // Copy helper that also works on insecure origins (http://ncsender:8090),
+  // where navigator.clipboard is unavailable.
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy') ? resolve() : reject(new Error('copy failed'));
+      } catch (e) { reject(e); }
+      document.body.removeChild(ta);
+    });
+  }
+
+  document.getElementById('gn-analysis-box').addEventListener('click', function (e) {
+    var chip = e.target.closest ? e.target.closest('.gn-copy') : null;
+    if (!chip) return;
+    var text = chip.getAttribute('data-copy');
+    copyText(text).then(function () {
+      chip.classList.add('copied');
+      var prev = chip.textContent;
+      chip.textContent = 'Copied!';
+      setTimeout(function () {
+        chip.classList.remove('copied');
+        // Point row may have been re-rendered meanwhile; only restore if
+        // this chip is still in the document with our placeholder text.
+        if (chip.isConnected && chip.textContent === 'Copied!') chip.textContent = prev;
+      }, 900);
+    }).catch(function () { /* leave silently; selection still possible */ });
+  });
+
+  // Selecting by line number: find the motion segment at (or nearest
+  // before) that line and select it on the map.
+  function selectByLineNumber() {
+    var lineErr = document.getElementById('gn-line-error');
+    lineErr.textContent = '';
+    var lineNo = parseInt(document.getElementById('gn-line-input').value, 10);
+    if (!lineNo || lineNo < 1 || !parsed) return;
+    var seg = findSegmentForLine(viewParsed(), lineNo);
+    if (!seg) {
+      lineErr.textContent = 'No motion segment at or before line ' + lineNo + '.';
+      return;
+    }
+    selectedSegment = seg;
+    document.getElementById('gn-creep-slider').value = 0;
+    targetOverride = null;
+    renderMain();
+  }
+
+  // ==== Start From Line (ncSender's native resume engine) ====
+  // Two-step for safety: analyze-line first (reconstructs modal state at
+  // the line, adjusts mid-arc picks to the arc start, flags tool
+  // mismatches, and returns the exact resume sequence), shown for review;
+  // start-from-line runs only on explicit confirm. Server requires Idle.
+  var sflAnalysis = null;
+
+  function sflHide() {
+    sflAnalysis = null;
+    document.getElementById('gn-sfl-panel').style.display = 'none';
+  }
+
+  function sflOpen() {
+    var errEl = document.getElementById('gn-sfl-error');
+    errEl.textContent = '';
+    if (!selectedSegment) { errEl.textContent = 'Select a line first (click the map or type a line number).'; return; }
+    var lineNo = selectedSegment.line;
+    api('/api/gcode-job/analyze-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lineNumber: lineNo })
+    }).then(function (res) {
+      sflAnalysis = res;
+      var panel = document.getElementById('gn-sfl-panel');
+      document.getElementById('gn-sfl-title').textContent =
+        'RESUME FROM LINE ' + res.lineNumber + (res.lineAdjusted ? ' (adjusted from ' + lineNo + ' \u2014 arc start)' : '');
+      var warns = [];
+      (res.warnings || []).forEach(function (w) { warns.push(String(w).replace(/<[^>]+>/g, '')); });
+      if (parsed && parsed.hasRotary) {
+        warns.push('Rotary file: the resume sequence pre-positions X/Y but NOT the A axis \u2014 A will rotate into position on the first resumed move.');
+      }
+      document.getElementById('gn-sfl-warnings').textContent = warns.join(' ');
+      var toolWarn = document.getElementById('gn-sfl-toolwarn');
+      if (res.toolMismatch) {
+        toolWarn.style.display = '';
+        toolWarn.textContent = 'Tool mismatch: line needs T' + res.targetTool + ' but T' + res.currentTool +
+          ' is loaded. The resume sequence includes the M6 tool change.';
+      } else {
+        toolWarn.style.display = 'none';
+      }
+      document.getElementById('gn-sfl-seq').textContent = (res.resumeSequence || []).join('\n');
+      panel.style.display = '';
+      // opened from the map context menu, the panel may be scrolled away
+      panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }).catch(function (e) {
+      errEl.textContent = e.message || String(e);
+    });
+  }
+  document.getElementById('gn-sfl-btn').addEventListener('click', sflOpen);
+
+  document.getElementById('gn-sfl-cancel').addEventListener('click', sflHide);
+
+  document.getElementById('gn-sfl-go').addEventListener('click', function () {
+    var errEl = document.getElementById('gn-sfl-error');
+    errEl.textContent = '';
+    if (!sflAnalysis) { sflHide(); return; }
+    var goBtn = document.getElementById('gn-sfl-go');
+    goBtn.disabled = true;
+    goBtn.textContent = 'Starting\u2026';
+    api('/api/gcode-job/start-from-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startLine: sflAnalysis.lineNumber,
+        skipToolCheck: false,
+        spindleDelaySec: parseFloat(document.getElementById('gn-sfl-delay').value) || 0,
+        approachHeight: parseFloat(document.getElementById('gn-sfl-approach').value) || 5,
+        plungeFeedRate: parseFloat(document.getElementById('gn-sfl-plunge').value) || 500
+      })
+    }).then(function (res) {
+      goBtn.disabled = false;
+      goBtn.textContent = 'Confirm & Start';
+      if (res && res.success === false) throw new Error(res.error || 'Start from line failed');
+      sflHide();
+      var lineErr = document.getElementById('gn-line-error');
+      lineErr.style.color = '#7ec98f';
+      lineErr.textContent = (res && res.message) || 'Job started from line.';
+      setTimeout(function () { lineErr.textContent = ''; lineErr.style.color = ''; }, 5000);
+    }).catch(function (e) {
+      goBtn.disabled = false;
+      goBtn.textContent = 'Confirm & Start';
+      errEl.textContent = e.message || String(e);
+    });
+  });
+
+  var selectDebounce = null;
+  document.getElementById('gn-line-input').addEventListener('input', function () {
+    if (selectDebounce) clearTimeout(selectDebounce);
+    selectDebounce = setTimeout(selectByLineNumber, 450);
+  });
+  document.getElementById('gn-line-input').addEventListener('change', function () {
+    if (selectDebounce) { clearTimeout(selectDebounce); selectDebounce = null; }
+    selectByLineNumber();
+  });
+
+  document.getElementById('gn-creep-slider').addEventListener('input', function () {
+    if (!selectedSegment) return;
+    targetOverride = null;
+    var pt = creepPoint(selectedSegment, creepFraction());
+    viewer.updateOverlayPoint(pt);
+    updateLineAnalysis();
+  });
+
+  // ---- Motion buttons ----
+  document.getElementById('gn-retract-btn').addEventListener('click', function () {
+    var z = Number(safeZValue());
+    confirmMotion('Retract to Safe Z',
+      'The machine will raise Z to <b>' + z.toFixed(3) + ' mm</b> (machine coordinates).', 'Retract')
+      .then(function (ok) {
+        if (!ok) return;
+        return sendCommand('G21 G90 G53 G0 Z' + z.toFixed(3), 'Retract to Z' + z + ' (G-code Navigator)');
+      })
+      .catch(function (err) { document.getElementById('gn-line-error').textContent = err.message; });
+  });
+
+  // Builds the (optionally Z-raised) rapid command to a world point.
+  function rapidToPointCmd(pt) {
+    var cmds = [];
+    if (document.getElementById('gn-raisez').checked) {
+      cmds.push('G21 G90 G53 G0 Z' + Number(safeZValue()).toFixed(3));
+    }
+    if (viewMode === 'rotary') {
+      // unwrapped view: vertical axis is A (view-units = rotaryK per degree)
+      cmds.push(motionPrefix() + 'G0 X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3));
+    } else {
+      cmds.push(motionPrefix() + 'G0 X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3));
+    }
+    return cmds.join('\n');
+  }
+
+  document.getElementById('gn-rapid-point-btn').addEventListener('click', function () {
+    var lineErr = document.getElementById('gn-line-error');
+    lineErr.textContent = '';
+    var pt = targetOverride || (selectedSegment ? creepPoint(selectedSegment, creepFraction()) : null);
+    if (!pt) { lineErr.textContent = 'No target: select a line, move the creep slider, or pick a point from the map menu.'; return; }
+    confirmMotion('Rapid to Point',
+      'The machine will move to <b>X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + '</b>' +
+      (document.getElementById('gn-raisez').checked ? ', raising Z to safe height first.' : ' <b>without raising Z first</b>.'),
+      'Move')
+      .then(function (ok) {
+        if (!ok) return;
+        return sendCommand(rapidToPointCmd(pt), 'Rapid to point X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + ' (G-code Navigator)');
+      })
+      .catch(function (err) { lineErr.textContent = err.message; });
+  });
+
+  function fmt(v) { return (v === undefined || v === null) ? '?' : Number(v).toFixed(3); }
+
+  // ---- Contour ----
+  // ==== Contour computation as a cancellable background job ====
+  // The trace pipeline runs in a Web Worker assembled at runtime from the
+  // real function sources (no duplicated code), so the UI never blocks and
+  // never repaints mid-computation — the map redraws exactly once, when
+  // the hull arrives. Cancel = worker.terminate(), which is instantaneous
+  // and total. If the host CSP blocks blob workers, a synchronous fallback
+  // runs on the next tick with the same UI (minus mid-stage cancel).
+  var contourJob = null;
+  var contourWorkerURL = null;
+  var CONTOUR_STAGES = { raster: [15, 'Rasterizing toolpath\u2026'], bridge: [40, 'Connecting parts\u2026'], trace: [60, 'Tracing silhouette\u2026'], snap: [80, 'Snapping to geometry\u2026'], finish: [92, 'Finishing\u2026'] };
+
+  function setContourUI(state, pct, label) {
+    var pending = document.getElementById('gn-contour-pending');
+    var working = document.getElementById('gn-contour-working');
+    pending.style.display = state === 'pending' ? '' : 'none';
+    working.style.display = state === 'working' ? '' : 'none';
+    if (state === 'working') {
+      document.getElementById('gn-contour-bar').style.width = (pct || 0) + '%';
+      document.getElementById('gn-contour-stage').textContent = label || 'Working\u2026';
+    }
+  }
+
+  function buildContourWorkerURL() {
+    if (contourWorkerURL) return contourWorkerURL;
+    var fns = [pointSegDist, convexHull, simplifyHull, fastCollinearReduce, traceOuterContour, autoTraceContour];
+    var src = fns.map(function (f) { return f.toString(); }).join('\n') +
+      '\nself.onmessage = function (ev) {' +
+      '\n  var d = ev.data;' +
+      '\n  var polys = [];' +
+      '\n  var off = d.polyOffsets, fl = d.polyCoords;' +
+      '\n  for (var i = 0; i + 1 < off.length; i++) {' +
+      '\n    var poly = [];' +
+      '\n    for (var k = off[i]; k < off[i + 1]; k += 2) poly.push({ x: fl[k], y: fl[k + 1] });' +
+      '\n    polys.push(poly);' +
+      '\n  }' +
+      '\n  var pts = [];' +
+      '\n  for (var p = 0; p + 1 < d.points.length; p += 2) pts.push({ x: d.points[p], y: d.points[p + 1] });' +
+      '\n  var dens = { points: pts, step: d.step, polys: polys, mmScale: d.mmScale || 1 };' +
+      '\n  var res = autoTraceContour(dens, d.tightness, function (stage) { self.postMessage({ type: "progress", stage: stage }); });' +
+      '\n  var h = res.hull || [];' +
+      '\n  var flat = new Float64Array(h.length * 2);' +
+      '\n  for (var q = 0; q < h.length; q++) { flat[q * 2] = h[q].x; flat[q * 2 + 1] = h[q].y; }' +
+      '\n  self.postMessage({ type: "done", hull: flat.buffer, parts: res.parts, bridges: res.bridges, fallback: res.fallback }, [flat.buffer]);' +
+      '\n};';
+    contourWorkerURL = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+    return contourWorkerURL;
+  }
+
+  function cancelContourJob(silent) {
+    if (!contourJob) return;
+    if (contourJob.worker) contourJob.worker.terminate();
+    if (contourJob.timer) clearTimeout(contourJob.timer);
+    contourJob = null;
+    setContourUI(hull ? 'done' : 'pending');
+    if (!silent) setStatus(loadStatus + ' Contour computation cancelled.');
+  }
+
+  function finishContourJob(newHull, meta, onDone) {
+    contourJob = null;
+    contourDeferred = false;
+    hull = newHull;
+    setContourUI('done');
+    if (!hull || hull.length < 3) {
+      document.getElementById('gn-trace-error').textContent = 'Contour trace produced no usable outline.';
+      hull = null;
+    } else if (meta.fallback) {
+      setStatus(loadStatus + ' Contour: trace failed sanity checks — showing the convex hull of everything.');
+    } else if (meta.bridges > 0) {
+      setStatus(loadStatus + ' Contour: ' + hull.length + ' vertices; ' + meta.parts + ' separate parts connected by ' + meta.bridges + ' bridges at their closest points.');
+    } else {
+      setStatus(loadStatus + ' Contour: ' + hull.length + ' vertices.');
+    }
+    renderMain(); // the single post-computation redraw
+    if (onDone && hull) onDone();
+  }
+
+  function startContourJob(onDone) {
+    if (!parsed) return;
+    cancelContourJob(true);
+    var errEl = document.getElementById('gn-trace-error');
+    errEl.textContent = '';
+    setContourUI('working', 4, 'Sampling toolpath\u2026');
+    contourJob = { worker: null, timer: null };
+    // Yield one tick so the progress UI paints before the densify pass.
+    contourJob.timer = setTimeout(function () {
+      if (!contourJob) return;
+      contourJob.timer = null;
+      var includeRapids = document.getElementById('gn-include-rapids').checked;
+      var dens = densifySegments(parsed.segments, includeRapids, parsed.bounds, parsed.units);
+      if (dens.points.length < 3) {
+        contourJob = null;
+        setContourUI('pending');
+        errEl.textContent = 'Not enough geometry to compute a contour (try enabling rapid moves).';
+        return;
+      }
+      var tightness = parseInt(document.getElementById('gn-tightness').value, 10);
+      if (isNaN(tightness)) tightness = 12;
+
+      function runSyncFallback() {
+        setContourUI('working', 30, 'Computing (worker unavailable)\u2026');
+        setTimeout(function () {
+          if (!contourJob) return;
+          var res = autoTraceContour(dens, tightness);
+          var h = res.hull;
+          if (!h || h.length < 3) { h = convexHull(dens.points); res.fallback = true; }
+          finishContourJob(h, res, onDone);
+        }, 30);
+      }
+
+      try {
+        var w = new Worker(buildContourWorkerURL());
+        contourJob.worker = w;
+        w.onmessage = function (ev) {
+          if (!contourJob || contourJob.worker !== w) return;
+          var msg = ev.data;
+          if (msg.type === 'progress') {
+            var st = CONTOUR_STAGES[msg.stage];
+            if (st) setContourUI('working', st[0], st[1]);
+          } else if (msg.type === 'done') {
+            w.terminate();
+            var flat = new Float64Array(msg.hull);
+            var h = [];
+            for (var i = 0; i + 1 < flat.length; i += 2) h.push({ x: flat[i], y: flat[i + 1] });
+            if (h.length < 3) { h = convexHull(dens.points); msg.fallback = true; }
+            finishContourJob(h, msg, onDone);
+          }
+        };
+        w.onerror = function () {
+          if (!contourJob || contourJob.worker !== w) return;
+          w.terminate();
+          contourJob.worker = null;
+          runSyncFallback();
+        };
+        // Pack the densified geometry into transferable flat buffers —
+        // zero-copy handoff even for hundreds of thousands of polyline points.
+        var total = 0;
+        for (var pi = 0; pi < dens.polys.length; pi++) total += dens.polys[pi].length;
+        var polyCoords = new Float64Array(total * 2);
+        var polyOffsets = new Int32Array(dens.polys.length + 1);
+        var wIdx = 0;
+        for (var pj = 0; pj < dens.polys.length; pj++) {
+          polyOffsets[pj] = wIdx;
+          var pl = dens.polys[pj];
+          for (var pk = 0; pk < pl.length; pk++) { polyCoords[wIdx++] = pl[pk].x; polyCoords[wIdx++] = pl[pk].y; }
+        }
+        polyOffsets[dens.polys.length] = wIdx;
+        var ptsFlat = new Float64Array(dens.points.length * 2);
+        for (var pq = 0; pq < dens.points.length; pq++) { ptsFlat[pq * 2] = dens.points[pq].x; ptsFlat[pq * 2 + 1] = dens.points[pq].y; }
+        w.postMessage(
+          { points: ptsFlat, step: dens.step, mmScale: dens.mmScale || 1, polyCoords: polyCoords, polyOffsets: polyOffsets, tightness: tightness },
+          [ptsFlat.buffer, polyCoords.buffer, polyOffsets.buffer]
+        );
+      } catch (e) {
+        runSyncFallback();
+      }
+    }, 30);
+  }
+
+  document.getElementById('gn-contour-compute-btn').addEventListener('click', function () { startContourJob(); });
+  document.getElementById('gn-contour-cancel-btn').addEventListener('click', function () { cancelContourJob(); });
+
+  document.getElementById('gn-include-rapids').addEventListener('change', function () {
+    hull = null;
+    startContourJob();
+  });
+
+  // Layer visibility (legend items toggle these; hidden layers are also
+  // excluded from hit-testing so underlying geometry becomes clickable).
+  var layerVis = { rapid: true, feed: true, selline: true, contour: true, jobstart: true, jobend: true, selpoint: true };
+  document.getElementById('gn-legend').addEventListener('click', function (ev) {
+    var item = ev.target.closest('.gn-legend-item');
+    if (!item) return;
+    var key = item.getAttribute('data-layer');
+    layerVis[key] = !layerVis[key];
+    item.classList.toggle('gn-layer-off', !layerVis[key]);
+    if (key === 'contour' && layerVis.contour && contourDeferred) {
+      ensureContour(); // computing renders when done
+      return;
+    }
+    renderMain();
+  });
+
+  // Per-tool legend entries: when the file changes tools, the single
+  // "Feed" item is replaced by one toggleable, color-coded item per tool.
+  var TOOL_COLORS = ['#4ec9b0', '#dcdcaa', '#9cdcfe', '#ce9178', '#b5cea8', '#f48fb1', '#4fc1ff', '#d7ba7d'];
+  function toolColor(tool) {
+    if (!parsed || !parsed.tools || parsed.tools.length === 0) return 'var(--gn-feed)';
+    var i = parsed.tools.indexOf(tool);
+    return i < 0 ? 'var(--gn-feed)' : TOOL_COLORS[i % TOOL_COLORS.length];
+  }
+
+  // ==== Depth (Z) and power (S) shading ====
+  // Z-depth: distinct pass heights get tinted along a light-to-dark ramp
+  // (shallow = lighter, deep = darker) so overlapping passes are visually
+  // separable instead of collapsing into one solid color. Only kicks in for
+  // a small, discrete set of Z levels (real multi-pass jobs); continuously
+  // varying Z (3D relief carving) has too many distinct values and falls
+  // back to the plain feed/tool color, matching pre-existing behavior.
+  var Z_SHADE_MIN_LEVELS = 2, Z_SHADE_MAX_LEVELS = 24;
+  function zShadeEnabled(p) {
+    return !!(p && p.zLevels && p.zLevels.length >= Z_SHADE_MIN_LEVELS && p.zLevels.length <= Z_SHADE_MAX_LEVELS);
+  }
+  function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(hex, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mixRgb(a, b, t) {
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * t),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t)
+    ];
+  }
+  // Depth shading lightens shallow passes toward white and darkens deep
+  // passes toward black, centered on the segment's OWN color (tool hue in
+  // multi-tool files, teal otherwise) — so tool identity and pass depth
+  // are both visible at once instead of Z-hue overriding tool-hue.
+  // Capped short of pure white/black (0.70 / 0.55) so the base hue never
+  // fully washes out or blacks out at the extremes.
+  var DEPTH_LIGHTEN_MAX = 0.70, DEPTH_DARKEN_MAX = 0.55;
+  function depthShadedColor(baseHex, zLevels, z1) {
+    var n = zLevels.length;
+    var idx = zLevels.indexOf(Number(z1.toFixed(3)));
+    if (idx < 0 || n <= 1) return baseHex;
+    var t = (idx / (n - 1)) * 2 - 1; // -1 shallowest .. 0 middle .. 1 deepest
+    var base = hexToRgb(baseHex);
+    var mixed = t < 0 ? mixRgb(base, [255, 255, 255], -t * DEPTH_LIGHTEN_MAX) : mixRgb(base, [0, 0, 0], t * DEPTH_DARKEN_MAX);
+    return 'rgb(' + mixed.join(',') + ')';
+  }
+  // S-power: opacity quantized into buckets so a laser raster (thousands
+  // of distinct S values) reduces to a manageable number of <path> groups
+  // instead of one per segment. Files with constant/no S (ordinary milling)
+  // all land in the top bucket, i.e. full opacity everywhere — unchanged
+  // from pre-existing behavior.
+  var S_OPACITY_BUCKETS = 20;
+  function sOpacityBucket(p, s) {
+    if (!p || !p.maxS) return S_OPACITY_BUCKETS;
+    var frac = Math.max(0, Math.min(1, s / p.maxS));
+    return Math.round(frac * S_OPACITY_BUCKETS);
+  }
+  function rebuildLegend() {
+    var feedItem = document.querySelector('#gn-legend .gn-legend-item[data-layer="feed"]');
+    // remove any previous per-tool items
+    document.querySelectorAll('#gn-legend .gn-legend-item[data-layer^="tool:"]').forEach(function (el) { el.remove(); });
+    var multiTool = parsed && parsed.tools && parsed.tools.length > 0;
+    if (feedItem) feedItem.style.display = multiTool ? 'none' : '';
+    var powerNote = document.getElementById('gn-power-note');
+    var depthNote = document.getElementById('gn-depth-note');
+    if (powerNote) powerNote.style.display = (parsed && parsed.maxS > 0) ? '' : 'none';
+    var movesItem = document.getElementById('gn-moves-item');
+    if (movesItem) movesItem.style.display = (parsed && parsed.maxS > 0) ? '' : 'none';
+    if (depthNote) depthNote.style.display = zShadeEnabled(parsed) ? '' : 'none';
+    if (!multiTool) return;
+    var frag = document.createDocumentFragment();
+    var keys = parsed.tools.slice();
+    var hasUntooled = parsed.segments.some(function (s) { return s.type !== 'G0' && (s.tool === null || s.tool === undefined); });
+    if (hasUntooled) keys.unshift(null);
+    keys.forEach(function (t) {
+      var span = document.createElement('span');
+      span.className = 'gn-legend-item';
+      var key = 'tool:' + (t === null ? '_' : t);
+      span.setAttribute('data-layer', key);
+      span.title = 'Click to hide/show this layer';
+      if (layerVis[key] === undefined) layerVis[key] = true;
+      if (!layerVis[key]) span.classList.add('gn-layer-off');
+      var sw = document.createElement('i');
+      sw.className = 'gn-swatch';
+      sw.style.background = t === null ? 'var(--gn-feed)' : toolColor(t);
+      span.appendChild(sw);
+      span.appendChild(document.createTextNode(t === null ? 'Feed (no tool)' : 'Feed T' + t));
+      frag.appendChild(span);
+    });
+    feedItem.parentNode.insertBefore(frag, feedItem.nextSibling);
+  }
+
+  // ==== Jog & Zero controls + live spindle position ====
+  var jogStep = 1;
+  var lastMachine = null; // { status, wx, wy, wz } — always millimetres
+  // The map is drawn in FILE units; grbl reports WPos in mm. For G20
+  // (inch) files the crosshair must divide by 25.4 or it lands 25.4x off
+  // and "drifts" every jog — the sync bug you observed.
+  var fileUnitsScale = 1; // mm per file unit (25.4 when the file is G20)
+  var JOG_FEED_Z_CAP = 1200;
+  function jogFeedXY() {
+    var sel = document.getElementById('gn-jog-feed');
+    var v = sel ? parseInt(sel.value, 10) : 2000;
+    return isNaN(v) ? 2000 : v;
+  }
+  var CONT_DIST = 800; // continuous jog travel cap (mm); released -> 0x85 cancel
+
+  function jogMsg(text) {
+    var el = document.getElementById('gn-jog-msg');
+    if (!text) { el.style.display = 'none'; return; }
+    el.textContent = text;
+    el.style.display = '';
+    clearTimeout(jogMsg._t);
+    jogMsg._t = setTimeout(function () { el.style.display = 'none'; }, 4000);
+  }
+
+  // sendCommand resolves on HTTP 200 even when the body reports failure;
+  // surface those so a rejected jog is never silent.
+  function sendMachine(cmd, label) {
+    return sendCommand(cmd, label || cmd).then(function (resp) {
+      if (resp && resp.success === false) {
+        throw new Error(resp.message || resp.error || ('Rejected: ' + cmd));
+      }
+      // refresh the DRO/crosshair right away and again shortly after,
+      // so the display tracks motion instead of waiting for the next poll
+      pollMachineState();
+      setTimeout(pollMachineState, 280);
+      return resp;
+    }).catch(function (e) {
+      jogMsg(e.message || String(e));
+      throw e;
+    });
+  }
+
+  function jogAllowed() {
+    if (lastMachine && (lastMachine.status === 'Run' || lastMachine.status === 'Hold' || lastMachine.status === 'Alarm' || lastMachine.status === 'Home')) {
+      jogMsg('Jogging blocked while machine is in ' + lastMachine.status + '.');
+      return false;
+    }
+    return true;
+  }
+
+  function jogCommandFor(dxs, dys, dzs, dist) {
+    var cmd = '$J=G91 G21';
+    if (dxs) cmd += ' X' + (dxs * dist);
+    if (dys) cmd += ' Y' + (dys * dist);
+    cmd += dzs ? (' Z' + (dzs * dist) + ' F' + Math.min(jogFeedXY(), JOG_FEED_Z_CAP)) : (' F' + jogFeedXY());
+    return cmd;
+  }
+
+  // Pointer-based jog: tap = one step, hold (>=280 ms) = continuous jog that
+  // is cancelled (0x85) the instant the pointer lifts, leaves the button, or
+  // the page loses visibility — the dead-man behaviours a jog pad needs.
+  var jogHold = null; // { btn, dxs, dys, dzs, timer, continuous, t0 }
+  var jogBoxEl = document.getElementById('gn-jog-box');
+
+  function endJogHold(commitTap) {
+    if (!jogHold) return;
+    var h = jogHold;
+    jogHold = null;
+    clearTimeout(h.timer);
+    h.btn.classList.remove('gn-jogging');
+    if (h.continuous) {
+      sendMachine('0x85', 'Jog cancel');
+    } else if (commitTap) {
+      if (jogAllowed()) sendMachine(jogCommandFor(h.dxs, h.dys, h.dzs, jogStep));
+    }
+  }
+
+  var zeroHold = null; // { btn, timer }
+  function endZeroHold() {
+    if (!zeroHold) return;
+    clearTimeout(zeroHold.timer);
+    zeroHold.btn.classList.remove('gn-holding');
+    zeroHold = null;
+  }
+
+  jogBoxEl.addEventListener('pointerdown', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.id === 'gn-jog-cancel') { sendMachine('0x85', 'Jog cancel'); return; }
+    if (b.hasAttribute('data-step')) {
+      jogStep = parseFloat(b.getAttribute('data-step'));
+      document.querySelectorAll('#gn-jog-steps .gn-step-pill').forEach(function (el) {
+        el.classList.toggle('gn-step-active', el === b);
+      });
+      return;
+    }
+    if (b.hasAttribute('data-zero')) {
+      endZeroHold();
+      var axes = b.getAttribute('data-zero');
+      b.classList.add('gn-holding');
+      zeroHold = {
+        btn: b,
+        timer: setTimeout(function () {
+          zeroHold = null;
+          b.classList.remove('gn-holding');
+          b.classList.add('gn-zeroed');
+          setTimeout(function () { b.classList.remove('gn-zeroed'); }, 700);
+          sendMachine('G10 L20 P0 ' + axes, 'Zero ' + axes);
+        }, 700)
+      };
+      try { b.setPointerCapture(ev.pointerId); } catch (e) {}
+      return;
+    }
+    var jd = b.getAttribute('data-jog');
+    var jz = b.getAttribute('data-jogz');
+    if (!jd && !jz) return;
+    if (!jogAllowed()) return;
+    var dxs = 0, dys = 0, dzs = 0;
+    if (jd) { var pr = jd.split(','); dxs = parseInt(pr[0], 10); dys = parseInt(pr[1], 10); }
+    if (jz) dzs = parseInt(jz, 10);
+    endJogHold(false);
+    var hold = { btn: b, dxs: dxs, dys: dys, dzs: dzs, continuous: false, t0: Date.now() };
+    hold.timer = setTimeout(function () {
+      if (jogHold !== hold) return;
+      hold.continuous = true;
+      b.classList.add('gn-jogging');
+      sendMachine(jogCommandFor(dxs, dys, dzs, CONT_DIST)).catch(function () {
+        if (jogHold === hold) { jogHold = null; b.classList.remove('gn-jogging'); }
+      });
+    }, 280);
+    jogHold = hold;
+    try { b.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+
+  ['pointerup', 'pointercancel'].forEach(function (evName) {
+    jogBoxEl.addEventListener(evName, function () {
+      endJogHold(evName === 'pointerup');
+      endZeroHold();
+    });
+  });
+  jogBoxEl.addEventListener('pointerleave', function () { endJogHold(false); endZeroHold(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) { endJogHold(false); endZeroHold(); } });
+
+  // Live position poll: drives the DRO readout and the map crosshair.
+  // Crosshair moves are surgical DOM updates — never a scene rebuild.
+  function pollMachineState() {
+    api('/api/server-state').then(function (st) {
+      var ms = st && (st.machineState || st.MachineState);
+      if (!ms) return;
+      var wposStr = ms.WPos || ms.wPos || ms.wpos || '0,0,0';
+      var pp = String(wposStr).split(',').map(Number);
+      lastMachine = { status: ms.Status || ms.status || '?', wx: pp[0] || 0, wy: pp[1] || 0, wz: pp[2] || 0, wa: pp.length > 3 && isFinite(pp[3]) ? pp[3] : null };
+      var droEl = document.getElementById('gn-dro');
+      if (droEl) {
+        var us = fileUnitsScale || 1;
+        var dp = us > 1 ? 3 : 2; // inches deserve an extra decimal
+        droEl.textContent =
+          lastMachine.status + ' \u00b7 X' + (lastMachine.wx / us).toFixed(dp) +
+          ' Y' + (lastMachine.wy / us).toFixed(dp) +
+          ' Z' + (lastMachine.wz / us).toFixed(dp) + (us > 1 ? ' in' : ' mm');
+      }
+      syncSpindleMarker();
+    }).catch(function () { /* transient poll errors are fine */ });
+  }
+  function syncSpindleMarker() {
+    if (lastMachine && layerVis.spindle !== false) {
+      var us = fileUnitsScale || 1;
+      if (viewMode === 'rotary') {
+        // vertical axis is unwrapped A; degrees are unit-independent
+        viewer.updateSpindle({ x: lastMachine.wx / us, y: (lastMachine.wa || 0) * (rotaryK || 1) });
+      } else {
+        viewer.updateSpindle({ x: lastMachine.wx / us, y: lastMachine.wy / us });
+      }
+    } else {
+      viewer.updateSpindle(null);
+    }
+  }
+  setInterval(pollMachineState, 300);
+  pollMachineState();
+
+  // ==== Rotary (4th-axis) unwrapped view ====
+  // Rotary G-code moves mostly in X and A, so the XY view collapses to a
+  // line. The rotary tab maps A onto the vertical axis (degrees, or true
+  // surface mm when a stock diameter is given), turning the file into a
+  // clickable graphic — click a move, get its line number, start from it.
+  var viewMode = 'xy';
+  var rotaryParsedCache = null;
+  var rotaryK = 1; // view-units per degree A
+
+  function rotaryScale() {
+    var dia = parseFloat(document.getElementById('gn-rotary-dia').value);
+    return (isFinite(dia) && dia > 0) ? (Math.PI * dia / 360) : 1;
+  }
+
+  function getRotaryParsed() {
+    var k = rotaryScale();
+    if (rotaryParsedCache && rotaryParsedCache._k === k && rotaryParsedCache._src === parsed) return rotaryParsedCache;
+    rotaryK = k;
+    var segs = parsed.segments;
+    var out = new Array(segs.length);
+    var mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i];
+      var ry0 = (s.a0 || 0) * k, ry1 = (s.a1 || 0) * k;
+      out[i] = {
+        line: s.line, type: s.type, tool: s.tool,
+        x0: s.x0, y0: ry0, x1: s.x1, y1: ry1,
+        z0: s.z0, z1: s.z1, s: s.s, points: null, aSrc: s
+      };
+      if (s.x0 < mnX) mnX = s.x0; if (s.x0 > mxX) mxX = s.x0;
+      if (s.x1 < mnX) mnX = s.x1; if (s.x1 > mxX) mxX = s.x1;
+      if (ry0 < mnY) mnY = ry0; if (ry0 > mxY) mxY = ry0;
+      if (ry1 < mnY) mnY = ry1; if (ry1 > mxY) mxY = ry1;
+    }
+    if (!isFinite(mnX)) { mnX = mnY = 0; mxX = mxY = 1; }
+    rotaryParsedCache = {
+      segments: out, bounds: { minX: mnX, minY: mnY, maxX: mxX, maxY: mxY },
+      tools: parsed.tools, units: parsed.units, totalLines: parsed.totalLines,
+      maxS: parsed.maxS, zLevels: parsed.zLevels,
+      hasRotary: true, _k: k, _src: parsed
+    };
+    return rotaryParsedCache;
+  }
+
+  function viewParsed() {
+    return (viewMode === 'rotary' && parsed && parsed.hasRotary) ? getRotaryParsed() : parsed;
+  }
+
+  function setViewMode(mode) {
+    if (mode === viewMode) return;
+    viewMode = mode;
+    // Trace/outline machinery is XY-only: hide the whole box and its
+    // legend entry in rotary view rather than showing disabled controls.
+    document.getElementById('gn-contour-box').style.display = mode === 'rotary' ? 'none' : '';
+    var contourLegend = document.querySelector('#gn-legend .gn-legend-item[data-layer="contour"]');
+    if (contourLegend) contourLegend.style.display = mode === 'rotary' ? 'none' : '';
+    // re-select the same line in the other view's segment array
+    var line = selectedSegment ? selectedSegment.line : null;
+    var vp = viewParsed();
+    if (line !== null && vp) {
+      var match = null;
+      for (var i = 0; i < vp.segments.length; i++) { if (vp.segments[i].line === line) { match = vp.segments[i]; break; } }
+      selectedSegment = match;
+    }
+    targetOverride = null;
+    renderMain();
+  }
+
+  document.getElementById('gn-rotary-dia').addEventListener('change', function () {
+    rotaryParsedCache = null;
+    if (viewMode === 'rotary') renderMain();
+  });
+
+  var tightnessDebounce = null;
+  document.getElementById('gn-tightness').addEventListener('input', function () {
+    if (tightnessDebounce) clearTimeout(tightnessDebounce);
+    tightnessDebounce = setTimeout(function () {
+      hull = null;
+      startContourJob();
+    }, 250);
+  });
+
+  // Run the spindle around the traced contour — like the built-in "Trace
+  // Outline", but following the true silhouette instead of a bounding box.
+  document.getElementById('gn-trace-contour-btn').addEventListener('click', function () {
+    var errEl = document.getElementById('gn-trace-error');
+    errEl.textContent = '';
+    if (!hull && parsed) { ensureContour(traceContourClicked); return; } // deferred on large files
+    traceContourClicked();
+  });
+
+  function traceContourClicked() {
+    var errEl = document.getElementById('gn-trace-error');
+    if (!hull || hull.length < 3) { errEl.textContent = 'No contour computed yet.'; return; }
+
+    var raiseZ = document.getElementById('gn-raisez').checked;
+    var safeZ = Number(safeZValue());
+
+    var perimeter = 0;
+    for (var i = 0; i < hull.length; i++) {
+      var a = hull[i], b = hull[(i + 1) % hull.length];
+      perimeter += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    var unitLabel = (parsed && parsed.units === 'G20') ? 'in' : 'mm';
+
+    var body = '<b>' + hull.length + ' vertices</b>, perimeter ~<b>' + perimeter.toFixed(1) + ' ' + unitLabel + '</b>.<br>' +
+      (raiseZ
+        ? 'Z will be raised to safe height (G53 Z' + safeZ.toFixed(3) + ' mm) first, then '
+        : '<b>Z will NOT be raised first</b> \u2014 ') +
+      'the spindle rapids around every vertex and returns to the first. Feed hold / Stop halts the trace at any time.';
+
+    confirmMotion('Trace Contour Outline', body, 'Trace').then(function (ok) {
+      if (!ok) return;
+      var cmds = [];
+      if (raiseZ) cmds.push('G21 G90 G53 G0 Z' + safeZ.toFixed(3));
+      var prefix = motionPrefix();
+      hull.forEach(function (p, idx) {
+        cmds.push((idx === 0 ? prefix : '') + 'G0 X' + p.x.toFixed(3) + ' Y' + p.y.toFixed(3));
+      });
+      cmds.push('G0 X' + hull[0].x.toFixed(3) + ' Y' + hull[0].y.toFixed(3));
+      return sendCommand(cmds.join('\n'), 'Trace contour outline (' + hull.length + ' vertices, ~' + perimeter.toFixed(0) + ' ' + unitLabel + ')')
+        .then(function () {
+          setStatus(loadStatus + ' Tracing contour: ' + hull.length + ' vertices, ~' + perimeter.toFixed(1) + ' ' + unitLabel + ' perimeter.');
+        });
+    }).catch(function (err) { errEl.textContent = err.message || String(err); });
+  }
+
+  // ============================================================
+  // Boot
+  // ============================================================
+  loadGcodeAndSettings();
+})();
+</script>
