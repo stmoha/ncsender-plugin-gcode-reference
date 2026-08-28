@@ -119,11 +119,11 @@
     </button>
     <button class="gref-tab" id="gref-tab-explain" onclick="grefSwitchTab('explain')">
       <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-      <span>Explain a line</span>
+      <span>G-code</span>
     </button>
     <button class="gref-tab" id="gref-tab-navigator" onclick="grefSwitchTab('navigator')">
       <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span>
-      <span>Navigator</span>
+      <span>Explorer</span>
     </button>
     <button class="gref-tab" id="gref-tab-manual" onclick="grefSwitchTab('manual')">
       <span class="gref-tab-ic" style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
@@ -170,6 +170,7 @@
             <li><a href="https://petervanderwalt.github.io/grblhal_docs/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">grblHAL community docs</a> &mdash; the complete G&#8209;code and M&#8209;code reference the command entries are based on.</li>
             <li><a href="https://github.com/siganberg/ncSender" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">ncSender</a> &mdash; the plugin API, and the <code>/api/firmware</code> endpoint (ncSender&rsquo;s cache of your controller&rsquo;s own <code>$ES</code>/<code>$$</code> enumeration) that powers the live &ldquo;on this controller&rdquo; check.</li>
             <li><a href="https://plugins.octoprint.org/plugins/marlingcodedocumentation/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">OctoPrint Marlin G&#8209;code Documentation</a> &mdash; the plugin that inspired this one.</li>
+            <li><a href="https://github.com/siganberg/ncsender-plugin-rapidchangeatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Rapid Change ATC</a>, <a href="https://github.com/siganberg/ncsender-plugin-manualtoolchanger" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Manual Tool Changer</a>, <a href="https://github.com/siganberg/ncsender-plugin-pneumaticatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Pneumatic ATC</a> and <a href="https://github.com/siganberg/ncsender-plugin-autodustboot" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">AutoDustboot</a> plugin repositories &mdash; the source for the console commands documented under <em>Plugin codes</em> (<code>$TLS</code>, <code>$SLOT&lt;n&gt;</code>, <code>$POCKET1</code>, <code>$ADB_RETRACT</code>/<code>$ADB_EXPAND</code>).</li>
           </ul>
           <p style="margin:6px 0"><b>Which controllers this applies to.</b> ncSender can drive both grblHAL and FluidNC machines; this reference is written for the grblHAL dialect:</p>
           <ul style="margin:4px 0 6px 18px;padding:0">
@@ -198,7 +199,7 @@
   <div class="gref-body" id="gref-body"></div>
   <div id="gn-host" style="display:none;flex:1;min-height:0;min-width:0;overflow:hidden"></div>
 
-  <div class="gref-foot">
+  <div class="gref-foot" id="gref-foot">
     Terminal shortcuts: <code>?keyword</code> looks up docs (e.g. <code>?dwell</code>, <code>?$110</code>) &nbsp;&middot;&nbsp;
     <code>??G1 X10 F500</code> explains a line word by word &nbsp;&middot;&nbsp;
     <code>??</code> on its own opens this reference, unfiltered. Run <code>$ES</code> / <code>$EE</code> / <code>$EA</code> on the controller to enumerate everything your build supports.
@@ -773,6 +774,39 @@
       } catch (e) {}
     }
 
+    window.grefOpenInNavigator = function (idx) {
+      state.tab = 'navigator';
+      render();
+      // give first-time activation a beat, then drive the navigator's own
+      // line input; its input/change listeners select the line on the map
+      setTimeout(function () {
+        try {
+          var inp = document.getElementById('gn-line-input');
+          if (!inp) return;
+          inp.value = String(idx + 1);
+          if (typeof Event === 'function' && inp.dispatchEvent) {
+            inp.dispatchEvent(new Event('input'));
+            inp.dispatchEvent(new Event('change'));
+          }
+        } catch (e) {}
+      }, 80);
+    };
+
+    window.grefExplainLineNum = function (v) {
+      var n = parseInt(v, 10);
+      if (isNaN(n) || n < 1) return;
+      state.tab = 'explain';
+      state.src = 'file';
+      state.pendingJump = n;
+      render();
+      // if the file is already loaded, jump immediately; otherwise
+      // renderExplain consumes pendingJump once the load lands
+      if (state.gfile.status === 'ready') {
+        state.pendingJump = null;
+        window.grefJump(String(n));
+      }
+    };
+
     window.grefExFocus = function (idx, el) {
       state.gfocus = idx;
       applySelectionHighlights();
@@ -961,6 +995,11 @@
       body.innerHTML = html;
       updateRenderNote();
       if (state.src === 'file' && state.gfile.status === 'idle') loadGcodeFile();
+      if (state.pendingJump && state.src === 'file' && state.gfile.status === 'ready') {
+        var pj = state.pendingJump;
+        state.pendingJump = null;
+        setTimeout(function () { try { window.grefJump(String(pj)); } catch (e) {} }, 0);
+      }
     }
 
     function renderExplainOutput(text, startLine) {
@@ -979,10 +1018,16 @@
         var fileIdx = startLine === null || startLine === undefined ? null : startLine + li;
         var numHtml = fileIdx === null ? '' :
           '<span style="color:var(--color-text-secondary,#9aa4b2);font-weight:400;margin-right:10px;user-select:none">' + (fileIdx + 1) + '</span>';
+        var mapBtn = (fileIdx === null || state.src !== 'file') ? '' :
+          '<button onclick="event.stopPropagation();grefOpenInNavigator(' + fileIdx + ')" ' +
+          'title="Show this line on the Explorer map" ' +
+          'style="float:right;background:transparent;border:1px solid var(--color-border,#333a45);' +
+          'color:var(--color-accent,#10b981);border-radius:4px;padding:1px 8px;cursor:pointer;font-size:0.7rem;margin-left:8px">' +
+          '&#8982; Explorer</button>';
         var attrs = fileIdx === null ? '' :
           ' data-line="' + fileIdx + '" onclick="grefExFocus(' + fileIdx + ', this)" style="cursor:pointer"' +
           ' title="Click to locate line ' + (fileIdx + 1) + ' in the file"';
-        out += '<div class="gref-exline"' + attrs + '><div class="gref-exline-src">' + numHtml + hlGcode(line.trim()) + '</div>';
+        out += '<div class="gref-exline"' + attrs + '><div class="gref-exline-src">' + mapBtn + numHtml + hlGcode(line.trim()) + '</div>';
         if (invalidCount > 0) {
           var warnColor = IS_LIGHT ? '#9a6700' : '#e3b341';
           out += '<div style="display:flex;gap:8px;align-items:center;padding:5px 10px;font-size:0.76rem;' +
@@ -1120,6 +1165,7 @@
     function renderTabs() {
       styleTab(document.getElementById('gref-tab-reference'), state.tab === 'reference');
       styleTab(document.getElementById('gref-tab-explain'), state.tab === 'explain');
+      styleTab(document.getElementById('gref-tab-navigator'), state.tab === 'navigator');
       styleTab(document.getElementById('gref-tab-manual'), state.tab === 'manual');
       styleTab(document.getElementById('gref-tab-settings'), state.tab === 'settings', !!DATA.showSettingsTab);
       document.getElementById('gref-panel-search').style.display = state.tab === 'reference' ? '' : 'none';
@@ -1128,6 +1174,8 @@
     function render() {
       renderTabs();
       applyTabWidth();
+      var foot = document.getElementById('gref-foot');
+      if (foot) foot.style.display = (state.tab === 'reference' || state.tab === 'explain') ? '' : 'none';
       var body = document.getElementById('gref-body');
       var slot = document.getElementById('gref-settings');
       var manual = document.getElementById('gref-manual');

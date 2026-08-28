@@ -25,13 +25,16 @@
      itself must declare the window size. 75vw wide; map height budgeted so
      header + tabs + status + legend fit inside the host's 85vh max-height
      without forcing the content scrollbar. */
-  #gn-root { font-family: -apple-system, Segoe UI, sans-serif; color: var(--gn-text); font-size: 13px; width: 96vw; max-width: 1760px; padding: 0 12px 10px; }
-  #gn-header-strip { display: flex; align-items: center; gap: 10px; min-height: 22px; margin: 2px 0 5px; }
+  #gn-root { font-family: -apple-system, Segoe UI, sans-serif; color: var(--gn-text); font-size: 13px;
+    /* hosted as a tab: fill the host pane; the map flexes to the space */
+    width: 100%; max-width: none; flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; padding: 0 12px 10px; }
+  #gn-header-strip { display: flex; align-items: center; gap: 10px; min-height: 22px; margin: 2px 0 5px; flex: 0 0 auto; }
   #gn-root * { box-sizing: border-box; }
   /* High-contrast selection color used for the selected vertex + list row */
   :root { --gn-select: #ffd400; }
-  .gn-layout { position: relative; }
-  .gn-map-col { margin-right: 310px; min-width: 0; display: flex; flex-direction: column; }
+  .gn-layout { position: relative; flex: 1 1 auto; min-height: 0; display: flex; gap: 14px; }
+  .gn-map-col { min-width: 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
   /* The map column is the sole height authority. The controls column is
      ABSOLUTELY positioned against the layout box (whose height comes only
      from the in-flow map column), pinned top:0/bottom:0 — its edges track
@@ -39,7 +42,9 @@
      height:0 + stretch attempt failed: an explicit height disables
      stretch, collapsing the column.) The map column reserves the width. */
   .gn-controls-col {
-    position: absolute; top: 0; bottom: 0; right: 0; width: 296px;
+    /* flex sibling of the map column: top and bottom edges align with the
+       rendering window (map + legend) automatically */
+    flex: 0 0 296px; width: 296px;
     display: flex; flex-direction: column; min-height: 0;
   }
   /* Upper controls scroll; the JOG & ZERO box stays pinned and always
@@ -49,10 +54,8 @@
   .gn-map-wrap {
     border: 1px solid var(--gn-border); border-radius: 4px; background: var(--gn-panel);
     overflow: hidden; position: relative; flex: 1 1 auto;
-    /* 85vh host cap minus dialog header (~56px), the single header strip
-       (~27px), legend (~24px), root padding — the old separate status +
-       rotary rows are gone, so the map gets the reclaimed space. */
-    height: 67vh; min-height: 400px;
+    /* hosted: the map takes whatever the tab gives it */
+    height: auto; min-height: 260px;
   }
   .gn-map-wrap svg {
     display: block; width: 100%; height: 100%; cursor: crosshair;
@@ -83,6 +86,8 @@
     background: var(--gn-panel); color: var(--gn-text); font-size: 12px; width: 100%; margin-bottom: 5px;
   }
   .gn-btn:hover { border-color: var(--gn-accent); }
+  .gn-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+  .gn-actions-grid .gn-btn { margin: 0; padding: 8px 6px; font-size: 12px; white-space: normal; line-height: 1.25; }
   .gn-btn.primary { background: var(--gn-accent); color: #fff; border-color: var(--gn-accent); }
   .gn-btn.danger { background: transparent; border-color: var(--gn-danger); color: var(--gn-danger); }
   /* !important: the host plugin dialog applies its own teal styling to
@@ -131,7 +136,7 @@
   .gn-view-tab:hover { background: #2f3542 !important; }
   .gn-view-tab.gn-tab-active { background: #2fc49b !important; color: #0d2a23 !important; font-weight: 700; }
   .gn-jog-cluster { width: fit-content; margin: 0 auto; display: flex; flex-direction: column; gap: 5px; }
-  .gn-jog-row { display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; }
+  .gn-jog-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
   .gn-jog-btn {
     height: 40px;
     border: none !important; background: #262b36 !important; color: #dfe3ea !important;
@@ -238,6 +243,7 @@
         <span class="gn-legend-item" data-layer="jobend" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-danger)"></i>Job end</span>
         <span class="gn-legend-item" data-layer="selpoint" title="Click to hide/show this layer"><i class="gn-swatch" style="background:var(--gn-select)"></i>Selected point</span>
         <span class="gn-legend-item" data-layer="spindle" title="Click to hide/show this layer"><i class="gn-swatch" style="background:rgba(255,255,255,0.75)"></i>Spindle</span>
+        <span style="flex:1"></span><span id="gn-zfilter-wrap" style="display:none; align-items:center; gap:6px;" title="Hide moves that stay above this Z. Filters the display only (some CAM never emits rapids but still lifts Z between cuts) - the traced contour is unaffected."><span style="white-space:nowrap;">Z &#8804; <b id="gn-zfilter-val">off</b></span><input type="range" id="gn-zfilter" style="width:130px;" /></span>
         <span class="gn-legend-item" data-layer="moves" id="gn-moves-item" style="display:none;" title="Hairline overlay of every move on top of the power shading, so lines stay visible and clickable"><i class="gn-swatch" style="background:#c8d2dc"></i>Moves</span>
         <span id="gn-power-note" style="display:none; font-size:11px; opacity:0.75; margin-left:4px;" title="Feed lines are shaded by commanded S: faint/invisible = laser off or low power, solid = full power">&#9673;&nbsp;shaded by power (S)</span>
         <span id="gn-depth-note" style="display:none; font-size:11px; opacity:0.75; margin-left:4px;" title="Feed lines are tinted by Z depth: lighter = shallower pass, darker = deeper pass">&#9673;&nbsp;tinted by depth (Z)</span>
@@ -247,7 +253,7 @@
       <div class="gn-controls-scroll">
       <div class="gn-panel-box">
         <div class="gn-field">
-          <label>Line to check (selects it on the map)</label>
+          <label style="display:flex;align-items:center;justify-content:space-between;"><span>Line to check (selects it on the map)</span><a href="#" style="color:var(--gn-accent);font-size:11px;text-decoration:none;" title="Explain this line word by word in the G-code tab" onclick="window.grefExplainLineNum&amp;&amp;window.grefExplainLineNum(document.getElementById(&quot;gn-line-input&quot;).value);return false;">G-code &#8599;</a></label>
           <input type="number" id="gn-line-input" min="1" value="1" />
         </div>
         <div id="gn-analysis-box" style="display:none; margin-top:8px;">
@@ -257,8 +263,22 @@
           <div class="gn-analysis-row" id="gn-an-point"></div>
           <div class="gn-analysis-row" id="gn-an-end"></div>
         </div>
-        <button class="gn-btn" id="gn-sfl-btn" style="margin-top:8px; background:#7a5a1e; border-color:#8a6a2e;" title="Start the loaded job from the selected line using ncSender's resume engine: safe-Z retract, tool check, XY pre-position, spindle spin-up, approach + controlled plunge. You review the sequence before anything moves.">Start From Line&hellip;</button>
-        <div id="gn-sfl-panel" style="display:none; margin-top:8px; border-top:1px solid var(--gn-border); padding-top:8px;">
+        <div class="gn-actions-grid" style="margin:8px 0 0;">
+        <button class="gn-btn" id="gn-sfl-btn" style="background:#7a5a1e; border-color:#8a6a2e;" title="Start the loaded job from the selected line using ncSender's resume engine: safe-Z retract, tool check, XY pre-position, spindle spin-up, approach + controlled plunge. You review the sequence before anything moves.">Start From Line&hellip;</button>
+        <button class="gn-btn" id="gn-retract-btn" title="Raises Z to the safe height (app setting or custom below). Also applied before Trace Contour Outline and Rapid to Point when the checkbox is on.">Retract to Safe Z</button>
+        </div>
+        <div class="gn-checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="gn-raisez" checked />
+          <label for="gn-raisez" style="margin:0;" title="Applies to both Trace Contour Outline and Rapid to Point, including map-menu rapids.">Raise Z to safe height first</label>
+        </div>
+        <div class="gn-checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="gn-preset-z-toggle" />
+          <label for="gn-preset-z-toggle" style="margin:0;" title="Used instead of the app's Safe Z Retract Height setting everywhere in this panel.">Custom safe height (mm, machine coords)</label>
+        </div>
+        <div class="gn-field" id="gn-preset-z-field" style="display:none; margin:6px 0 0;">
+          <input type="number" id="gn-preset-z-input" step="0.5" value="10" />
+        </div>
+                <div id="gn-sfl-panel" style="display:none; margin-top:8px; border-top:1px solid var(--gn-border); padding-top:8px;">
           <div class="gn-note" id="gn-sfl-title" style="margin-bottom:4px;">RESUME FROM LINE</div>
           <div id="gn-sfl-warnings" style="font-size:11.5px; color:#e9c46a; margin-bottom:6px;"></div>
           <div id="gn-sfl-toolwarn" style="display:none; font-size:11.5px; color:#e9a1a1; margin-bottom:6px;"></div>
@@ -286,32 +306,18 @@
         </div>
       </div>
 
-      <div class="gn-panel-box">
-        <button class="gn-btn" id="gn-retract-btn" title="Raises Z to the safe height (app setting or custom below). Also applied before Trace Contour Outline and Rapid to Point when the checkbox is on.">Retract to Safe Z</button>
-        <div class="gn-checkbox-row">
-          <input type="checkbox" id="gn-raisez" checked />
-          <label for="gn-raisez" style="margin:0;" title="Applies to both Trace Contour Outline and Rapid to Point, including map-menu rapids.">Raise Z to safe height first</label>
-        </div>
-        <div class="gn-checkbox-row" style="margin-bottom:0;">
-          <input type="checkbox" id="gn-preset-z-toggle" />
-          <label for="gn-preset-z-toggle" style="margin:0;" title="Used instead of the app's Safe Z Retract Height setting everywhere in this panel.">Custom safe height (mm, machine coords)</label>
-        </div>
-        <div class="gn-field" id="gn-preset-z-field" style="display:none; margin:6px 0 0;">
-          <input type="number" id="gn-preset-z-input" step="0.5" value="10" />
-        </div>
-      </div>
-
-      <div class="gn-panel-box">
-        <button class="gn-btn yellow" id="gn-rapid-point-btn" title="Moves to the yellow marker: the creep position, a contour vertex, or a snapped point from the map menu. Use it to eyeball clearance over your stock before starting a job.">Rapid to Point</button>
-        <div class="gn-field" style="margin-bottom:0;">
+            <div class="gn-panel-box">
+        <div class="gn-field">
           <label>Creep along selected line (0% = start, 100% = end)</label>
           <input type="range" id="gn-creep-slider" min="0" max="100" value="0" style="width:100%;" />
         </div>
-        <div class="gn-error" id="gn-line-error"></div>
-      </div>
-
-      <div class="gn-panel-box" id="gn-contour-box">
+        <div class="gn-actions-grid" style="margin:0;">
+        <button class="gn-btn yellow" id="gn-rapid-point-btn" title="Moves to the yellow marker: the creep position, a contour vertex, or a snapped point from the map menu. Use it to eyeball clearance over your stock before starting a job.">Rapid to Point</button>
         <button class="gn-btn pink" id="gn-trace-contour-btn" title="Runs the spindle around the purple outline with rapids and returns to the first vertex — like ncSender's built-in Trace Outline, but following the true silhouette instead of a bounding box.">Trace Contour Outline&hellip;</button>
+        </div>
+        <div class="gn-error" id="gn-line-error"></div>
+
+      <div id="gn-contour-box" style="margin-top:6px;">
         <div id="gn-contour-pending" style="display:none; margin:6px 0;">
           <div class="gn-note" style="margin-bottom:4px;">Contour skipped on this large file to keep loading fast.</div>
           <button class="gn-btn" id="gn-contour-compute-btn" style="background:#3a3d41;">Compute Contour Outline</button>
@@ -1951,6 +1957,11 @@
 
   Viewer.prototype.updateOverlayPoint = function (pt) {
     this._attrsDirty = true;
+    // keep the cached overlay in sync: cull re-renders (zoom/pan on large
+    // files) rebuild the scene from this.overlay, and without this line the
+    // creep marker snapped back to its position at selection time
+    this.overlay = this.overlay || {};
+    this.overlay.selectedPoint = pt;
     var g = this.svg.querySelector('g.gn-world');
     if (!g) return;
     var ring = g.querySelector('circle.gn-target-ring');
@@ -2060,7 +2071,7 @@
     // skip the innerHTML rebuild entirely (a rebuild on a big file paints a
     // blank frame while multi-MB paths re-rasterise) and just re-apply the
     // transform.
-    var sig = [parsed.totalLines, cullKey, DEC, Math.round(Math.log(Math.max(effScale, 1e-9)) * 6),
+    var sig = [parsed.totalLines, parsed.segments.length, cullKey, DEC, Math.round(Math.log(Math.max(effScale, 1e-9)) * 6),
       o.selectedLine, JSON.stringify(o.layerVis || {}), o.traced ? 1 : 0, o.tracedIncludeRapids ? 1 : 0,
       o.hull ? o.hull.length : 0,
       o.selectedPoint ? o.selectedPoint.x.toFixed(3) + ',' + o.selectedPoint.y.toFixed(3) : '-',
@@ -2533,6 +2544,7 @@
         loadStatus = 'Loaded ' + parsed.totalLines + ' lines, ' + parsed.segments.length + ' motion segments. Safe Z Retract Height: ' +
           (appSettings.safeZHeight !== undefined ? appSettings.safeZHeight : -5) + ' mm (app setting).';
         rebuildLegend();
+        initZFilter();
         // Select the first motion segment so the map highlight and LINE
         // ANALYSIS panel are populated immediately at open.
         if (parsed.segments.length) {
@@ -2617,16 +2629,22 @@
     var pt = targetOverride || creepPoint(selectedSegment, creepFraction());
     document.getElementById('gn-an-gcode').innerHTML = 'G-code: ' + (raw ? copyChip(raw) : '(line ' + selectedSegment.line + ')');
     var sSeg = selectedSegment;
+    // Z on every row; flag it when this line never wrote Z (modal carry
+    // from an earlier line - some CAM lifts Z on its own line, then moves XY)
+    var zExplicit = /(^|[^A-Za-z])[Zz][+\-.0-9]/.test(raw);
+    var zNote = zExplicit ? '' :
+      ' <span style="opacity:0.6;font-size:10.5px;" title="This line does not set Z - the value is carried from an earlier line">(Z inferred)</span>';
+    var t = targetOverride ? null : creepFraction();
+    var ptZ = t === null ? sSeg.z1 : sSeg.z0 + (sSeg.z1 - sSeg.z0) * t;
     if (sSeg.aSrc) {
-      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.aSrc.x0.toFixed(3) + ' A' + sSeg.aSrc.a0.toFixed(3));
-      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3));
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.aSrc.x0.toFixed(3) + ' A' + sSeg.aSrc.a0.toFixed(3) + ' Z' + sSeg.aSrc.z0.toFixed(3));
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3) + ' Z' + ptZ.toFixed(3));
+      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + sSeg.aSrc.x1.toFixed(3) + ' A' + sSeg.aSrc.a1.toFixed(3) + ' Z' + sSeg.aSrc.z1.toFixed(3)) + zNote;
     } else {
-      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.x0.toFixed(3) + ' Y' + sSeg.y0.toFixed(3));
-      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3));
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.x0.toFixed(3) + ' Y' + sSeg.y0.toFixed(3) + ' Z' + sSeg.z0.toFixed(3));
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + ' Z' + ptZ.toFixed(3));
+      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + sSeg.x1.toFixed(3) + ' Y' + sSeg.y1.toFixed(3) + ' Z' + sSeg.z1.toFixed(3)) + zNote;
     }
-    document.getElementById('gn-an-end').innerHTML = sSeg.aSrc
-      ? 'End: ' + copyChip('X' + sSeg.aSrc.x1.toFixed(3) + ' A' + sSeg.aSrc.a1.toFixed(3))
-      : 'End: ' + copyChip('X' + sSeg.x1.toFixed(3) + ' Y' + sSeg.y1.toFixed(3));
   }
 
   // Copy helper that also works on insecure origins (http://ncsender:8090),
@@ -2921,7 +2939,9 @@
       if (!contourJob) return;
       contourJob.timer = null;
       var includeRapids = document.getElementById('gn-include-rapids').checked;
-      var dens = densifySegments(parsed.segments, includeRapids, parsed.bounds, parsed.units);
+      // the outline shrink-wraps what you SEE: Z filter + layer toggles
+      var src = contourSourceSegments();
+      var dens = densifySegments(src.segments, includeRapids, src.bounds, parsed.units);
       if (dens.points.length < 3) {
         contourJob = null;
         setContourUI('pending');
@@ -3013,6 +3033,8 @@
       return;
     }
     renderMain();
+    // hiding/showing geometry layers changes what the contour should wrap
+    if (key === 'rapid' || key === 'feed' || key.indexOf('tool:') === 0) contourRefilter();
   });
 
   // Per-tool legend entries: when the file changes tools, the single
@@ -3334,8 +3356,103 @@
     return rotaryParsedCache;
   }
 
+  var zFilterMax = null; // null = off; otherwise hide segments entirely above this Z
+
+  // Everything the contour consumes flows through here: the Z filter AND
+  // the legend layer toggles (rapid / feed / per-tool). If it isn't drawn,
+  // it doesn't shape the outline.
+  function contourSourceSegments() {
+    var base = zFiltered(parsed);
+    if (!base || !base.segments) return { segments: [], bounds: parsed ? parsed.bounds : null };
+    var multiTool = parsed.tools && parsed.tools.length > 0;
+    var segs = base.segments.filter(function (s) {
+      if (s.type === 'G0') return layerVis.rapid !== false; // checkbox decides inclusion later
+      if (multiTool) {
+        var key = 'tool:' + (s.tool === null || s.tool === undefined ? '_' : s.tool);
+        return layerVis[key] !== false;
+      }
+      return layerVis.feed !== false;
+    });
+    // bounds of what remains, so the sampling step matches the visible
+    // geometry instead of the whole file
+    var b = null;
+    if (segs.length) {
+      b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      segs.forEach(function (s) {
+        b.minX = Math.min(b.minX, s.x0, s.x1); b.maxX = Math.max(b.maxX, s.x0, s.x1);
+        b.minY = Math.min(b.minY, s.y0, s.y1); b.maxY = Math.max(b.maxY, s.y0, s.y1);
+      });
+    }
+    return { segments: segs, bounds: b || parsed.bounds };
+  }
+
+  // Shared invalidation for anything that changes which segments are
+  // visible: drop the stale outline immediately, then (debounced) either
+  // recompute automatically (small visible set) or re-offer the button.
+  var _contourRefilterTimer = null;
+  function contourRefilter() {
+    if (hull || contourJob) {
+      cancelContourJob(true);
+      hull = null;
+      renderMain();
+    }
+    if (_contourRefilterTimer) clearTimeout(_contourRefilterTimer);
+    if (viewMode === 'rotary') return;
+    _contourRefilterTimer = setTimeout(function () {
+      _contourRefilterTimer = null;
+      var src = contourSourceSegments();
+      if (src.segments.length && src.segments.length <= AUTO_CONTOUR_MAX_SEGMENTS) {
+        contourDeferred = false;
+        startContourJob();
+      } else {
+        contourDeferred = true;
+        setContourUI('pending');
+      }
+    }, 450);
+  }
+
+  var _zfCache = { src: null, z: undefined, out: null };
+  function zFiltered(vp) {
+    if (zFilterMax === null || !vp || !vp.segments) return vp;
+    // memoized: keeps object identity stable across renders so the
+    // viewer's per-file bbox cache survives pan/zoom between slider moves
+    if (_zfCache.src === vp && _zfCache.z === zFilterMax) return _zfCache.out;
+    var out = { };
+    for (var k in vp) if (Object.prototype.hasOwnProperty.call(vp, k)) out[k] = vp[k];
+    out.segments = vp.segments.filter(function (s) {
+      return Math.min(s.z0, s.z1) <= zFilterMax;
+    });
+    _zfCache.src = vp; _zfCache.z = zFilterMax; _zfCache.out = out;
+    return out;
+  }
+
   function viewParsed() {
-    return (viewMode === 'rotary' && parsed && parsed.hasRotary) ? getRotaryParsed() : parsed;
+    var vp = (viewMode === 'rotary' && parsed && parsed.hasRotary) ? getRotaryParsed() : parsed;
+    return zFiltered(vp);
+  }
+
+  function initZFilter() {
+    var wrap = document.getElementById('gn-zfilter-wrap');
+    var slider = document.getElementById('gn-zfilter');
+    var val = document.getElementById('gn-zfilter-val');
+    if (!wrap || !slider || !parsed || !parsed.segments || !parsed.segments.length) return;
+    var zmin = Infinity, zmax = -Infinity;
+    parsed.segments.forEach(function (s) {
+      if (s.z0 < zmin) zmin = s.z0; if (s.z1 < zmin) zmin = s.z1;
+      if (s.z0 > zmax) zmax = s.z0; if (s.z1 > zmax) zmax = s.z1;
+    });
+    if (!isFinite(zmin) || !isFinite(zmax) || zmax - zmin < 0.001) return;
+    var STEPS = 200;
+    slider.min = '0'; slider.max = String(STEPS); slider.value = String(STEPS);
+    wrap.style.display = 'inline-flex';
+    var toZ = function (v) { return zmin + (zmax - zmin) * (v / STEPS); };
+    slider.addEventListener('input', function () {
+      var v = parseInt(slider.value, 10);
+      if (v >= STEPS) { zFilterMax = null; val.textContent = 'off'; }
+      else { zFilterMax = toZ(v); val.textContent = zFilterMax.toFixed(2); }
+      renderMain();
+      contourRefilter();
+    });
   }
 
   function setViewMode(mode) {
@@ -3344,6 +3461,8 @@
     // Trace/outline machinery is XY-only: hide the whole box and its
     // legend entry in rotary view rather than showing disabled controls.
     document.getElementById('gn-contour-box').style.display = mode === 'rotary' ? 'none' : '';
+    var traceBtn = document.getElementById('gn-trace-contour-btn');
+    if (traceBtn) traceBtn.style.display = mode === 'rotary' ? 'none' : '';
     var contourLegend = document.querySelector('#gn-legend .gn-legend-item[data-layer="contour"]');
     if (contourLegend) contourLegend.style.display = mode === 'rotary' ? 'none' : '';
     // re-select the same line in the other view's segment array

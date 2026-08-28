@@ -89,7 +89,7 @@ function onBeforeCommand(commands, context, settings) {
           initialTab: 'reference'
         });
       } else if (explainMatch) {
-        title = 'G-code Explorer - Explain';
+        title = 'G-code Explorer';
         html = buildDialogHTML({
           initialTab: 'explain',
           initialExplain: explainMatch[1]

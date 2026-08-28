@@ -29,12 +29,6 @@
       "label": "G-code Explorer",
       "icon": "icon.png",
       "clientOnly": true
-    },
-    {
-      "id": "open-navigator",
-      "label": "G-code Navigator",
-      "icon": "icon.png",
-      "clientOnly": true
     }
   ]
 }
