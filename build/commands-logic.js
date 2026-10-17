@@ -5,7 +5,8 @@
  *   - no import/require - everything must live in this one file
  *   - handlers must be plain `function` declarations (the host looks
  *     them up as globals via GetValue)
- *   - `pluginContext` global provides log() and showDialog()
+ *   - `pluginContext` global provides log(), showDialog() and, on
+ *     ncSender 2.0.191+, showDialogAsync() / closeDialog()
  *   - buildInitialConfig(raw) is REQUIRED - the host evaluates it at
  *     load time to sanitize saved settings
  *
@@ -21,9 +22,10 @@
  * with a harmless parenthesis comment marked silent, so the controller
  * just answers "ok" and nothing appears in the terminal.
  *
- * NOTE: ncSender plugin dialogs are modal - showDialog() blocks the
- * plugin engine until the dialog is closed. Close the reference to
- * resume normal command flow; avoid lookups while a job is streaming.
+ * Dialogs open with showDialogAsync when the host has it: the plugin
+ * engine stays free, so console commands, jogs and the Explorer tab's
+ * moves go through while the dialog is open. Older hosts fall back to
+ * showDialog, which holds every command until the dialog is closed.
  * ================================================================ */
 
 /** Sanitize persisted settings (required by the plugin host). */
@@ -51,6 +53,24 @@ function buildDialogHTML(opts) {
   // escape '</' so the payload can't terminate the <script> tag.
   var json = JSON.stringify(payload).split('</').join('<\\/');
   return DIALOG_TEMPLATE.split('@@PAYLOAD@@').join(json);
+}
+
+// Id of the dialog this plugin last opened without waiting. The client
+// shows one plugin dialog at a time, so a new lookup replaces the old one
+// on screen; closing it on the server too keeps its handle from waiting
+// forever for an answer that will never come.
+var lastDialogId = null;
+
+function openDialog(title, html) {
+  var options = { size: 'large', closable: true };
+  if (typeof pluginContext.showDialogAsync === 'function') {
+    if (lastDialogId !== null && typeof pluginContext.closeDialog === 'function') {
+      try { pluginContext.closeDialog(lastDialogId); } catch (ignored) {}
+    }
+    lastDialogId = pluginContext.showDialogAsync(title, html, options);
+    return;
+  }
+  pluginContext.showDialog(title, html, options);
 }
 
 /** Main hook: intercept ?keyword and ??line typed in the Console. */
@@ -103,8 +123,7 @@ function onBeforeCommand(commands, context, settings) {
       }
 
       try {
-        // Blocks until the user closes the dialog (host behavior).
-        pluginContext.showDialog(title, html, { size: 'large', closable: true });
+        openDialog(title, html);
       } catch (dlgErr) {
         try { pluginContext.log('gcode-reference: showDialog failed: ' + dlgErr); } catch (ignored) {}
       }

@@ -1,7 +1,7 @@
 {
   "id": "com.cncdocs.gcode-reference",
   "name": "G-code Explorer",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "minAppVersion": "0.3.111",
   "platforms": {
     "v1": "0.3.111",

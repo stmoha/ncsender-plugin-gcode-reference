@@ -166,7 +166,8 @@
         <div class="gcfg-hint">Typing <code>?dwell</code> or <code>??G1 X10 F500</code> opens documentation
           instead of sending the text to the controller; <code>??</code> alone opens this reference unfiltered.
           A bare <code>?</code> (status query) is never intercepted.
-          The dialog pauses command streaming while open, so avoid lookups mid-job.</div>
+          On ncSender 2.0.191 and later, other commands keep flowing while the dialog is open;
+          on older versions it pauses command streaming until closed, so avoid lookups mid-job there.</div>
         <div class="gcfg-status" id="gcfg-status"></div>
       </div>
 
