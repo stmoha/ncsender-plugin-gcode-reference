@@ -69,7 +69,7 @@ node build/build.mjs
 
 ### Releasing
 
-Push a version tag (`vX.Y.Z`, matching `manifest.json`) and the GitHub Actions pipeline rebuilds the generated files, packages `<plugin-id>_<tag>.zip`, and publishes the release using `latest_release.md` as the notes. See [RELEASING.md](RELEASING.md) for the full checklist. `./.scripts/release.sh` does the bump-commit-tag-push in one go from a terminal.
+Publishing a release with a version tag (`vX.Y.Z`, matching `manifest.json`) triggers the GitHub Actions pipeline, which rebuilds the generated files and attaches `<plugin-id>_<tag>.zip` (pushing just the tag works too: the pipeline then creates the release with `latest_release.md` as the notes). See [RELEASING.md](RELEASING.md) for the full checklist. `./.scripts/release.sh` does the bump-commit-tag-push in one go from a terminal.
 
 ## Credits
 

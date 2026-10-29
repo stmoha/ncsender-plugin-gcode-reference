@@ -1,8 +1,8 @@
 # Releasing G-code Explorer
 
-Releases are hands-off: Claude does the editing, testing, committing and
-publishing, and GitHub builds the plugin ZIP. Nothing to copy, paste or
-click on github.com.
+Releases are nearly hands-off: Claude does the editing, testing and
+committing, you click one prefilled **Publish release** link, and GitHub
+builds the plugin ZIP. Nothing to copy or paste.
 
 Repo: https://github.com/stmoha/ncsender-plugin-gcode-reference
 Local clone (optional): C:\Users\stefa\Documents\GitHub\ncsender-plugin-gcode-reference
@@ -17,13 +17,16 @@ bug or feature. Claude:
   `node build/build.mjs`, and tests the result in a headless browser
 - bumps `manifest.json`'s version and rewrites `latest_release.md`
 
-## 2. Claude publishes
-- commits to `main` and pushes
-- pushes the tag `vX.Y.Z` (same number as `manifest.json`)
-- the **Build and Release Plugin** workflow then rebuilds the generated
-  files, packages `com.cncdocs.gcode-reference_vX.Y.Z.zip`, and creates the
-  release with `latest_release.md` as its notes (and posts to Discord if
-  the `DISCORD_WEBHOOK_URL` secret is set)
+## 2. Claude commits, you publish
+- Claude commits to `main` and pushes
+- Claude can't create tags or releases from its session (GitHub refuses
+  them by policy), so it hands you a link to the **new release** page with
+  the tag (`vX.Y.Z`), title and notes already filled in from
+  `latest_release.md` — click **Publish release**
+- publishing creates the tag, and the **Build and Release Plugin**
+  workflow rebuilds the generated files, packages
+  `com.cncdocs.gcode-reference_vX.Y.Z.zip` and attaches it to the release
+  (and posts to Discord if the `DISCORD_WEBHOOK_URL` secret is set)
 - Claude checks that the workflow went green and the ZIP is attached
 
 ## 3. You
@@ -36,8 +39,9 @@ bug or feature. Claude:
 ## Registry listing
 Updates reach users straight from GitHub releases, so no registry change
 is needed per release. The listing's name/version text in
-`siganberg/ncSender.plugins-registry` is cosmetic; Claude can open a PR
-from the `stmoha` fork when it's worth refreshing.
+`siganberg/ncSender.plugins-registry` is cosmetic; when it's worth
+refreshing, Claude pushes a branch to the `stmoha` fork and gives you a
+prefilled "Create pull request" link.
 
 ---
 
