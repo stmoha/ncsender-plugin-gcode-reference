@@ -1029,6 +1029,9 @@
         state.gfile = { status: 'none', name: '', lines: [] };
         return;
       }
+      // The name and the file are fetched side by side. A big file arrives
+      // after its name, so a name that comes first waits here for it.
+      var fileName = '';
       try {
         // the loaded program itself
         fetch(apiBase() + '/api/gcode-files/current/download')
@@ -1037,7 +1040,7 @@
             if (text === null || text === undefined) {
               state.gfile = { status: 'none', name: '', lines: [] };
             } else {
-              state.gfile = { status: 'ready', name: '', lines: text.split(/\r?\n/) };
+              state.gfile = { status: 'ready', name: fileName, lines: text.split(/\r?\n/) };
             }
             if (state.tab === 'explain') renderExplain();
           })
@@ -1052,8 +1055,10 @@
             if (!s) return;
             var name = s.currentFile || s.CurrentFile || s.fileName || s.FileName ||
                        s.currentGcodeFile || s.CurrentGcodeFile || '';
-            if (name && state.gfile.status === 'ready') {
-              state.gfile.name = String(name).split(/[\\/]/).pop();
+            if (!name) return;
+            fileName = String(name).split(/[\\/]/).pop();
+            if (state.gfile.status === 'ready') {
+              state.gfile.name = fileName;
               var head = document.getElementById('gref-filename');
               if (head) head.innerHTML = esc(state.gfile.name);
             }

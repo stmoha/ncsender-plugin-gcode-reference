@@ -1,6 +1,11 @@
-## What's Changed in 2.1.3
+## What's Changed in 2.1.4
 
-### 📱 Made for portrait screens
+### 🔧 Fixes
+- **G-code tab:** a big file's name now shows at the top of the file pane. It said "Loaded file" whenever the file took longer to load than its name
+
+---
+
+## 📱 Made for portrait screens (from 2.1.3, out earlier today)
 On a portrait screen, such as ncSender's 1080×1920 kiosk:
 - The dialog uses more of the screen's height
 - **G-code tab:** the file sits on top and its definitions get the full width underneath, instead of two narrow columns; drag the bar between them to give either one more room
@@ -12,9 +17,11 @@ Also on every screen:
 - The Explorer legend moves onto a second line when space is tight, instead of breaking each label in two
 
 <p>
-<img src="https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/cc7be8f2463dfe2f3e4b54926661efa697845b3a/.github/release-images/v2.1.3-gcode-modes.png" width="420" alt="G-code tab in portrait: file above, definitions below with mode badges">
-<img src="https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/cc7be8f2463dfe2f3e4b54926661efa697845b3a/.github/release-images/v2.1.3-explorer.png" width="420" alt="Explorer tab in portrait: map on top, controls in a row beneath">
+<img src="https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/18e0e0984a5da9c153bfcaef5e271288d2c5cf65/.github/release-images/v2.1.4-gcode-modes.png" width="420" alt="G-code tab in portrait: file above, definitions below with mode badges">
+<img src="https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/18e0e0984a5da9c153bfcaef5e271288d2c5cf65/.github/release-images/v2.1.4-explorer.png" width="420" alt="Explorer tab in portrait: a two-tool job with only T17 shown, map on top, controls in a row beneath">
 </p>
+
+<sub>A 141,000-line, two-tool job on a 1080×1920 screen. The Explorer is showing T17 only: click a tool in the map legend to hide or show it.</sub>
 
 ---
 
