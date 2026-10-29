@@ -120,27 +120,15 @@ jobs:
           fi
 
       - name: Announce on Discord
-        if: success() && env.DISCORD_WEBHOOK_URL != ''
+        # posts the release's notes (as published) to the plugin's Discord
+        # channel; skipped when the DISCORD_WEBHOOK_URL secret isn't set. A
+        # failed post doesn't fail the release - it shows as a warning.
+        if: success()
+        continue-on-error: true
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG: ${{ steps.plugin_info.outputs.TAG }}
         run: |
-          PLUGIN_NAME="${{ steps.plugin_info.outputs.PLUGIN_NAME }}"
-          TAG="${{ steps.plugin_info.outputs.TAG }}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
-
-          curl -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"📖 ${PLUGIN_NAME} ${TAG} Released!\",
-                \"description\": \"A new version of the ${PLUGIN_NAME} plugin is now available.\",
-                \"url\": \"${RELEASE_URL}\",
-                \"color\": 1941124,
-                \"fields\": [
-                  {
-                    \"name\": \"Download\",
-                    \"value\": \"[View Release](${RELEASE_URL})\"
-                  }
-                ]
-              }]
-            }" \
-            "$DISCORD_WEBHOOK_URL"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' > announce-notes.md
+          bash .github/scripts/announce-discord.sh "$TAG" announce-notes.md

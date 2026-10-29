@@ -1,0 +1,38 @@
+name: Announce on Discord
+
+# Posts a release to the plugin's Discord channel by hand: Actions ->
+# Announce on Discord -> Run workflow. Releases announce themselves when
+# published (see release-build.yml); use this to re-post one, or to post a
+# release that came out before the webhook was set up.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release to announce, e.g. v2.1.4 (leave empty for the latest)'
+        required: false
+        default: ''
+
+jobs:
+  announce:
+    name: Announce release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Announce on Discord
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::Add the DISCORD_WEBHOOK_URL secret first (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
+          TAG="${TAG_INPUT:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}"
+          echo "Announcing $TAG"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' > announce-notes.md
+          bash .github/scripts/announce-discord.sh "$TAG" announce-notes.md

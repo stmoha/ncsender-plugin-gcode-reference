@@ -47,8 +47,10 @@ bug or feature. Claude:
   (notes you type on the website are kept). For the minute or so the build
   takes, the release page shows the latest commit message in place of the
   notes and has no ZIP yet; refresh once the build is done
-  (and posts to Discord if the `DISCORD_WEBHOOK_URL` secret is set)
-- Claude checks that the workflow went green and the ZIP is attached
+- the same workflow then posts the release to the plugin's Discord
+  channel (see **Discord** below)
+- Claude checks that the workflow went green, the ZIP is attached and the
+  Discord post went out
 
 ## 4. You
 - ncSender → Settings → Plugins shows **Update available** for G-code
@@ -56,6 +58,24 @@ bug or feature. Claude:
   `repository` field). Update, hard-refresh (Ctrl+F5), check the version.
 - If you also edit locally: GitHub Desktop → **Fetch origin** → **Pull
   origin** to bring the clone up to date before changing anything.
+
+## Discord
+Every published release is posted to the plugin's channel on the ncSender
+Discord: its own notes (everything above the "Also new since" roll-up), up
+to four of its screenshots, and how to update. It goes through a webhook
+siganberg set up for the channel.
+- **The webhook lives only in the repository secret `DISCORD_WEBHOOK_URL`**
+  (Settings → Secrets and variables → Actions). It is a password for posting
+  in the channel, so it never goes in the repo, which is public. If it ever
+  leaks, siganberg can delete the webhook and make a new one (the channel's
+  settings → Integrations → Webhooks); paste the new URL into the secret.
+- **Post a release by hand** (a re-post, or one from before the webhook):
+  Actions → **Announce on Discord** → Run workflow; leave the tag empty for
+  the latest release.
+- With no secret the post is skipped, and a failed post shows as a warning
+  without failing the release.
+- The script is `.github/scripts/announce-discord.sh`; run it with
+  `DRY_RUN=1` to print the message instead of sending it.
 
 ## Registry listing
 Updates reach users straight from GitHub releases, so no registry change
