@@ -104,6 +104,13 @@ jobs:
               --repo ${{ github.repository }} \
               --clobber \
               dist/*.zip
+            # Published with no notes (the short "new release" link): fill
+            # them in from latest_release.md. Notes typed on the website stay.
+            BODY=$(gh release view "$TAG" --repo ${{ github.repository }} --json body --jq '.body // ""')
+            if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+              echo "Release $TAG has no notes - using latest_release.md"
+              gh release edit "$TAG" --repo ${{ github.repository }} --notes-file release-notes.md
+            fi
           else
             gh release create "$TAG" \
               --repo ${{ github.repository }} \

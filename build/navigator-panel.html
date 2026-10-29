@@ -114,8 +114,21 @@
   .gn-note { font-size: 11px; opacity: 0.75; margin-top: 4px; }
   .gn-warn { color: #dcbf3c; font-size: 11px; margin-top: 4px; }
   .gn-error { color: var(--gn-danger); font-size: 12px; margin-top: 6px; }
-  .gn-legend { display: flex; gap: 14px; font-size: 11px; margin-top: 6px; opacity: 0.85; flex: 0 0 auto; }
-  .gn-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  /* wraps onto a second row when narrow instead of breaking each label */
+  .gn-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; margin-top: 6px; opacity: 0.85; flex: 0 0 auto; }
+  .gn-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  /* Portrait screens (ncSender's 1080x1920 kiosk): the map on top at full
+     width, the three control boxes side by side beneath it - like
+     ncSender's own portrait layout - instead of a tall, narrow map. */
+  @media (orientation: portrait) {
+    .gn-layout { flex-direction: column; gap: 8px; }
+    .gn-controls-col { flex: 0 0 auto; width: auto; max-height: 36vh; }
+    /* line check | creep & contour | jog (the jog box sits inside the
+       scrolling column, so all three are its grid cells) */
+    .gn-controls-scroll { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 272px;
+                          gap: 8px; align-items: start; padding-right: 0; }
+    .gn-controls-scroll > .gn-panel-box { margin: 0; }
+  }
   .gn-legend-item { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 4px; padding: 1px 4px; }
   .gn-legend-item:hover { background: rgba(255,255,255,0.08); }
   .gn-legend-item.gn-layer-off { opacity: 0.32; text-decoration: line-through; }

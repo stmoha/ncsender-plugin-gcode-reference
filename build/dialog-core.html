@@ -128,6 +128,18 @@
 
   /* --- explain tab --- */
   .gref-exwrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
+  .gref-divider { touch-action: none; }
+
+  /* --- portrait screens (ncSender's 1080x1920 kiosk) ---
+     Use more of the tall screen, and stack the G-code tab's panes - the
+     file above, its definitions below at full width - instead of two
+     narrow columns. !important: the pane sizes are inline styles. */
+  @media (orientation: portrait) {
+    .gref { height: min(80vh, calc(85vh - 100px)); }
+    .gref-exsplit { flex-direction: column !important; }
+    .gref-exsplit > #gref-leftpane { flex: 0 0 var(--gx-split-v, 40%) !important; }
+    .gref-exsplit > .gref-divider { cursor: row-resize !important; margin: 0 !important; }
+  }
   .gref-exinput { width: 100%; resize: vertical; padding: 10px 12px;
                   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
                   background: var(--color-surface-muted, #232a33); color: var(--color-text-primary, #e8eaed);
@@ -386,7 +398,7 @@
                   gfile: { status: 'idle', name: '', lines: [] },
                   gsel: { anchor: -1, from: -1, to: -1 }, gfocus: -1,
                   fsearch: { q: '', matches: [], cur: -1 },
-                  src: 'file', paste: { text: '', lines: [] }, rendered: 0, splitPct: 42 };
+                  src: 'file', paste: { text: '', lines: [] }, rendered: 0, splitPct: 42, splitPctV: 40 };
     // terminal ??<line> payloads open as pasted code so line numbers,
     // click-to-locate and find all work on them
     if (DATA.initialExplain) {
@@ -1201,10 +1213,10 @@
       var body = document.getElementById('gref-body');
       var a = activeSrc();
       state.rendered = 0;
-      var html = '<div class="gref-exwrap" id="gref-exwrap" style="display:flex;flex-direction:row;flex:1;min-height:0;min-width:0;max-width:100%">';
+      var html = '<div class="gref-exwrap gref-exsplit" id="gref-exwrap" style="display:flex;flex-direction:row;flex:1;min-height:0;min-width:0;max-width:100%">';
 
-      /* ---- left: source pane (loaded file OR pasted code) ---- */
-      html += '<div id="gref-leftpane" style="flex:0 0 ' + state.splitPct + '%;display:flex;flex-direction:column;min-width:0;min-height:0;' +
+      /* ---- left (top in portrait): source pane (loaded file OR pasted code) ---- */
+      html += '<div id="gref-leftpane" style="--gx-split-v:' + state.splitPctV + '%;flex:0 0 ' + state.splitPct + '%;display:flex;flex-direction:column;min-width:0;min-height:0;' +
               'border:1px solid var(--color-border,#333a45);border-radius:var(--radius-small,6px);overflow:hidden">';
 
       // source toggle
@@ -1296,7 +1308,9 @@
       html += '</div>';
 
       /* ---- draggable divider ---- */
-      html += '<div onmousedown="grefSplitStart(event)" title="Drag to resize the panes" ' +
+      // pointer events so a finger can drag it on a touchscreen too
+      html += '<div class="gref-divider" onpointerdown="grefSplitStart(event)" ' +
+              'onmousedown="if(!window.PointerEvent)grefSplitStart(event)" title="Drag to resize the panes" ' +
               'style="flex:0 0 6px;cursor:col-resize;align-self:stretch;margin:0 3px;border-radius:3px;' +
               'background:var(--color-border,#333a45)"></div>';
 
@@ -1885,18 +1899,32 @@
         if (!wrap || !left || typeof wrap.getBoundingClientRect !== 'function' ||
             typeof document.addEventListener !== 'function') return;
         var rect = wrap.getBoundingClientRect();
+        // stacked (portrait): the divider moves up and down
+        var vertical = false;
+        try { vertical = window.getComputedStyle(wrap).flexDirection === 'column'; } catch (e) {}
         var move = function (e) {
+          if (vertical) {
+            var pv = ((e.clientY - rect.top) / rect.height) * 100;
+            pv = Math.max(15, Math.min(80, pv));
+            state.splitPctV = pv;
+            left.style.setProperty('--gx-split-v', pv + '%');
+            return;
+          }
           var pct = ((e.clientX - rect.left) / rect.width) * 100;
           pct = Math.max(20, Math.min(78, pct));
           state.splitPct = pct;
           left.style.flex = '0 0 ' + pct + '%';
         };
+        var P = !!window.PointerEvent;
+        var evMove = P ? 'pointermove' : 'mousemove', evUp = P ? 'pointerup' : 'mouseup';
         var up = function () {
-          document.removeEventListener('mousemove', move);
-          document.removeEventListener('mouseup', up);
+          document.removeEventListener(evMove, move);
+          document.removeEventListener(evUp, up);
+          if (P) document.removeEventListener('pointercancel', up);
         };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', up);
+        document.addEventListener(evMove, move);
+        document.addEventListener(evUp, up);
+        if (P) document.addEventListener('pointercancel', up);
         if (ev && ev.preventDefault) ev.preventDefault();
       } catch (e) {}
     };

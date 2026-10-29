@@ -34,6 +34,8 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 **Settings tab** — terminal-lookup options, the keyboard shortcut that opens G-code Explorer (shared with ncSender's Settings → Controls), plus full source attribution and controller-applicability notes.
 
+**Portrait screens** — on a portrait display such as ncSender's 1080×1920 kiosk, the G-code tab stacks the file above its definitions and the Explorer puts the map on top with its controls in a row beneath; landscape keeps the side-by-side layout.
+
 ## Installation
 
 **From the ncSender plugin registry**: in ncSender go to **Settings → Plugins → Install Plugin** and pick *G-code Explorer*. Installed copies update themselves from this repo's releases.

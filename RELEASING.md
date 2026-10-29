@@ -15,15 +15,17 @@ In a Claude session with this repo attached (push access), describe the
 bug or feature. Claude:
 - works on a fresh clone of this repo — GitHub is always the source of truth
 - edits the sources (`gcode-database.js`, `build/*`), runs
-  `node build/build.mjs`, and tests the result in a headless browser
+  `node build/build.mjs`, and tests the result in a headless browser,
+  in landscape and on a portrait 1080×1920 screen (ncSender's kiosk)
 - bumps `manifest.json`'s version and rewrites `latest_release.md`: the
   new changes first, then, if the previous release went out less than
   about a week earlier, an "Also new since vX.Y.Z" section rolling up the
   releases most people won't have installed yet (back to the last release
   that has been out a while), so anyone updating sees everything they get
 - for changes you can see, takes screenshots of the plugin in a mock
-  ncSender dialog and adds them to the notes; they live in
-  `.github/release-images/`, which stays out of the plugin ZIP
+  ncSender dialog on a portrait 1080×1920 screen and adds them to the
+  notes; they live in `.github/release-images/`, which stays out of the
+  plugin ZIP
 
 ## 2. You test the ZIP first
 - Claude packages the change exactly like the release workflow does
@@ -36,11 +38,13 @@ bug or feature. Claude:
 - Claude commits to `main` and pushes
 - Claude can't create tags or releases from its session (GitHub refuses
   them by policy), so it hands you a link to the **new release** page with
-  the tag (`vX.Y.Z`), title and notes already filled in from
-  `latest_release.md` — click **Publish release**
+  the tag (`vX.Y.Z`) and title filled in — click **Publish release**
+  (leave the notes box empty)
 - publishing creates the tag, and the **Build and Release Plugin**
   workflow rebuilds the generated files, packages
-  `com.cncdocs.gcode-reference_vX.Y.Z.zip` and attaches it to the release
+  `com.cncdocs.gcode-reference_vX.Y.Z.zip`, attaches it to the release and,
+  since the notes were left empty, fills them in from `latest_release.md`
+  (notes you type on the website are kept)
   (and posts to Discord if the `DISCORD_WEBHOOK_URL` secret is set)
 - Claude checks that the workflow went green and the ZIP is attached
 
