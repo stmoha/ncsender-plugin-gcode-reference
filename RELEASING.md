@@ -44,7 +44,9 @@ bug or feature. Claude:
   workflow rebuilds the generated files, packages
   `com.cncdocs.gcode-reference_vX.Y.Z.zip`, attaches it to the release and,
   since the notes were left empty, fills them in from `latest_release.md`
-  (notes you type on the website are kept)
+  (notes you type on the website are kept). For the minute or so the build
+  takes, the release page shows the latest commit message in place of the
+  notes and has no ZIP yet; refresh once the build is done
   (and posts to Discord if the `DISCORD_WEBHOOK_URL` secret is set)
 - Claude checks that the workflow went green and the ZIP is attached
 
