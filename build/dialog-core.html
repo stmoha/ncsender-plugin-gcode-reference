@@ -1312,9 +1312,11 @@
           sc.textContent = NAV_SCRIPT;
           (document.body || host).appendChild(sc);
         }
-        // canvas measures itself against a visible container
+        // canvas measures itself against a visible container; the panel
+        // also re-reads ncSender's settings (units) each time it is shown
         if (typeof window.dispatchEvent === 'function' && typeof Event === 'function') {
           setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }, 30);
+          try { window.dispatchEvent(new Event('gcode-explorer-show')); } catch (e) {}
         }
       } catch (e) {
         try { if (typeof console !== 'undefined' && console.log) console.log('[gcode-explorer] navigator activation failed:', e && e.message); } catch (e2) {}

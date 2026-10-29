@@ -24,7 +24,7 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 **Live controller cross-check** — the plugin reads `/api/firmware` to learn which controller is connected (grblHAL, Grbl 1.1 or FluidNC) and its settings list. It flags settings that don't exist on *your* firmware build, shows the live value of the ones that do, and marks G/M/`$` codes your controller can't run, with the reason. Each entry's **Controllers** row shows all three at a glance.
 
-**Explorer tab** — an interactive 2D map of the loaded toolpath. Snap to G-code lines graphically and jog the machine to them with safe-Z handling, trace a rubber-band outline of the cut area, and unwrap 4th-axis jobs to see rotary toolpaths flat. Open **Tools → G-code Explorer** and pick the Explorer tab.
+**Explorer tab** — an interactive 2D map of the loaded toolpath. Snap to G-code lines graphically and jog the machine to them with safe-Z handling, trace a rubber-band outline of the cut area, and unwrap 4th-axis jobs to see rotary toolpaths flat. Everything it shows and sends follows ncSender's Metric/Imperial setting, whatever units the file uses. Open **Tools → G-code Explorer** and pick the Explorer tab.
 
 **G-code tab (explain a line)** — paste a whole program, or use the loaded file, and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, FluidNC `$Long/Names`, `G10 L2`/`L20` combos, `G01`→`G1` normalization, parameter assignments, `(MSG, …)` / `(PRINT, …)` / `NCSENDER_PAUSE` comments, and both comment styles. With a controller connected, lines it can't run are flagged.
 

@@ -221,7 +221,7 @@
     <span id="gn-view-tabs" style="display:none; align-items:center; gap:6px; flex:0 0 auto;">
       <span id="gn-rotary-badge" style="font-size:12px; font-weight:700; color:#2fc49b;" title="A-axis motion detected in this file &mdash; rendering as unwrapped X&ndash;A instead of flat XY">&#8635; Rotary (A-axis)</span>
       <span id="gn-rotary-dia-wrap" style="display:inline-flex; align-items:center; gap:4px; margin-left:6px;">
-        <span style="font-size:12px; opacity:0.85;" title="Stock diameter: scales A degrees to true surface distance so the unwrapped view has real proportions. Leave 0 to plot raw degrees.">&Oslash; stock (mm)</span>
+        <span style="font-size:12px; opacity:0.85;" title="Stock diameter: scales A degrees to true surface distance so the unwrapped view has real proportions. Leave 0 to plot raw degrees.">&Oslash; stock (<span class="gn-u-len">mm</span>)</span>
         <input type="number" id="gn-rotary-dia" min="0" step="1" value="0" style="width:60px;" />
       </span>
     </span>
@@ -273,7 +273,7 @@
         </div>
         <div class="gn-checkbox-row" style="margin-bottom:0;">
           <input type="checkbox" id="gn-preset-z-toggle" />
-          <label for="gn-preset-z-toggle" style="margin:0;" title="Used instead of the app's Safe Z Retract Height setting everywhere in this panel.">Custom safe height (mm, machine coords)</label>
+          <label for="gn-preset-z-toggle" style="margin:0;" title="Used instead of the app's Safe Z Retract Height setting everywhere in this panel.">Custom safe height (<span class="gn-u-len">mm</span>, machine coords)</label>
         </div>
         <div class="gn-field" id="gn-preset-z-field" style="display:none; margin:6px 0 0;">
           <input type="number" id="gn-preset-z-input" step="0.5" value="10" />
@@ -290,11 +290,11 @@
               <input type="number" id="gn-sfl-delay" min="0" step="0.5" value="2" />
             </div>
             <div class="gn-field" style="flex:1; margin:0;" title="Rapid to this height above the target Z, then plunge at the controlled feed">
-              <label>Approach (mm)</label>
+              <label>Approach (<span class="gn-u-len">mm</span>)</label>
               <input type="number" id="gn-sfl-approach" min="0" step="1" value="5" />
             </div>
-            <div class="gn-field" style="flex:1; margin:0;" title="Feed rate for the final plunge to depth (mm/min)">
-              <label>Plunge F</label>
+            <div class="gn-field" style="flex:1; margin:0;" title="Feed rate for the final plunge to depth">
+              <label>Plunge (<span class="gn-u-feed">mm/min</span>)</label>
               <input type="number" id="gn-sfl-plunge" min="10" step="50" value="500" />
             </div>
           </div>
@@ -348,8 +348,8 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <span class="gn-note" style="margin:0;">JOG &amp; ZERO</span>
           <span style="display:flex; align-items:center; gap:5px;">
-            <span style="font-size:12px; opacity:0.85;">Feed</span>
-            <select id="gn-jog-feed" class="gn-feed-select" title="XY jog feed (mm/min); Z is capped at 1200">
+            <span style="font-size:12px; opacity:0.85;">Feed (<span class="gn-u-feed">mm/min</span>)</span>
+            <select id="gn-jog-feed" class="gn-feed-select" title="XY jog feed; Z jogs are capped at 1200 mm/min (47 in/min)">
               <option value="500">500</option>
               <option value="1000">1000</option>
               <option value="2000" selected>2000</option>
@@ -358,8 +358,8 @@
           </span>
         </div>
         <div class="gn-jog-cluster">
-          <div class="gn-note" style="margin:0 0 2px; grid-column: 1 / -1;">Step (mm) &middot; tap = step &middot; hold = continuous</div>
-          <div class="gn-jog-row" id="gn-jog-steps" title="Jog step in mm (tap = one step, hold = continuous)">
+          <div class="gn-note" style="margin:0 0 2px; grid-column: 1 / -1;">Step (<span class="gn-u-len">mm</span>) &middot; tap = step &middot; hold = continuous</div>
+          <div class="gn-jog-row" id="gn-jog-steps" title="Jog step (tap = one step, hold = continuous)">
             <button class="gn-step-pill" data-step="0.1">0.1</button>
             <button class="gn-step-pill gn-step-active" data-step="1">1</button>
             <button class="gn-step-pill" data-step="10">10</button>
@@ -2257,6 +2257,125 @@
   var hull = null;
   var appSettings = null;
   var loadStatus = '';
+
+  // ---- Units ----
+  // Everything this panel shows or asks for follows ncSender's own units
+  // setting (Metric / Imperial), like the main window. Three unit worlds
+  // meet here:
+  //   - the map is drawn in the FILE's units (G20 = inch, else mm),
+  //   - ncSender reports positions and stores Safe Z in mm,
+  //   - the operator reads and types in the APP's units.
+  // Commands carry the app's unit mode (G20/G21) with converted numbers,
+  // as ncSender's own moves do, so the controller is left in the units
+  // the main window expects.
+  var appImperial = false;
+  var unitsApplied = false;
+  var JOG_STEPS = { mm: [0.1, 1, 10], inch: [0.01, 0.1, 1] };
+  var JOG_FEEDS = { mm: [500, 1000, 2000, 4000], inch: [20, 40, 80, 160] };
+  function appScale() { return appImperial ? 25.4 : 1; }          // mm per app unit
+  function uLen() { return appImperial ? 'in' : 'mm'; }
+  function uFeed() { return appImperial ? 'in/min' : 'mm/min'; }
+  function uDp() { return appImperial ? 4 : 3; }
+  function unitCode() { return appImperial ? 'G20' : 'G21'; }
+  function mmToApp(mm) { return mm / appScale(); }
+  function appToMm(v) { return v * appScale(); }
+  function fileToApp(v) { return v * (fileUnitsScale || 1) / appScale(); }
+  // a file-unit coordinate as app-unit text (display and commands alike)
+  function fc(v) { return fileToApp(v).toFixed(uDp()); }
+  // a mm value as app-unit text
+  function mc(mm) { return mmToApp(mm).toFixed(uDp()); }
+  function roundTo(v, d) { var f = Math.pow(10, d); return Math.round(v * f) / f; }
+
+  function fillJogControls(stepIdx, feedIdx) {
+    var key = appImperial ? 'inch' : 'mm';
+    var steps = JOG_STEPS[key], feeds = JOG_FEEDS[key];
+    var stepsEl = document.getElementById('gn-jog-steps');
+    if (stepsEl) {
+      if (stepIdx < 0 || stepIdx >= steps.length) stepIdx = 1;
+      jogStep = steps[stepIdx];
+      stepsEl.innerHTML = steps.map(function (v, i) {
+        return '<button class="gn-step-pill' + (i === stepIdx ? ' gn-step-active' : '') + '" data-step="' + v + '">' + v + '</button>';
+      }).join('') + '<span></span>';
+    }
+    var feedEl = document.getElementById('gn-jog-feed');
+    if (feedEl) {
+      if (feedIdx < 0 || feedIdx >= feeds.length) feedIdx = 2;
+      feedEl.innerHTML = feeds.map(function (v, i) {
+        return '<option value="' + v + '"' + (i === feedIdx ? ' selected' : '') + '>' + v + '</option>';
+      }).join('');
+    }
+  }
+
+  // Switch the panel to the app's units. Typed values keep their physical
+  // size (10 mm becomes 0.394 in); the first switch to inches uses round
+  // inch defaults instead. Returns true when the units changed.
+  function applyUnits(imperial) {
+    imperial = !!imperial;
+    if (unitsApplied && imperial === appImperial) return false;
+    var first = !unitsApplied;
+    var oldKey = appImperial ? 'inch' : 'mm';
+    var stepIdx = JOG_STEPS[oldKey].indexOf(jogStep);
+    var feedEl = document.getElementById('gn-jog-feed');
+    var feedIdx = feedEl ? JOG_FEEDS[oldKey].indexOf(parseFloat(feedEl.value)) : 2;
+    var oldScale = appScale();
+    unitsApplied = true;
+    appImperial = imperial;
+    var k = oldScale / appScale();
+    var lenDp = imperial ? 3 : 1, feedDp = imperial ? 1 : 0;
+    function conv(id, d, inchDefault) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var v = parseFloat(el.value);
+      if (first && imperial && inchDefault !== undefined) { el.value = inchDefault; return; }
+      if (isFinite(v)) el.value = roundTo(v * k, d);
+    }
+    if (first && !imperial) { /* markup defaults are already mm */ } else {
+      conv('gn-preset-z-input', lenDp, 0.4);
+      conv('gn-sfl-approach', lenDp, 0.2);
+      conv('gn-sfl-plunge', feedDp, 20);
+      conv('gn-rotary-dia', lenDp);
+    }
+    ['gn-preset-z-input', 'gn-sfl-approach', 'gn-rotary-dia'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.step = imperial ? (id === 'gn-sfl-approach' ? '0.05' : '0.01') : (id === 'gn-preset-z-input' ? '0.5' : '1');
+    });
+    var pl = document.getElementById('gn-sfl-plunge');
+    if (pl) { pl.step = imperial ? '1' : '50'; pl.min = imperial ? '0.5' : '10'; }
+    var root = document.getElementById('gn-root');
+    if (root) {
+      root.querySelectorAll('.gn-u-len').forEach(function (el) { el.textContent = uLen(); });
+      root.querySelectorAll('.gn-u-feed').forEach(function (el) { el.textContent = uFeed(); });
+    }
+    fillJogControls(stepIdx, feedIdx);
+    return true;
+  }
+
+  // Read ncSender's settings again (units, Safe Z) and follow them.
+  function refreshAppSettings() {
+    return getSettings().then(function (s) {
+      if (!s) return;
+      appSettings = s;
+      var changed = applyUnits(s.unitsPreference === 'imperial');
+      if (changed && parsed) {
+        loadStatus = buildLoadStatus();
+        setStatus(loadStatus);
+        if (typeof updateLineAnalysis === 'function') updateLineAnalysis();
+        refreshZFilterLabel();
+      }
+    }).catch(function () {});
+  }
+  window.addEventListener('settings-changed', function (e) {
+    var d = e && e.detail;
+    if (!d || d.unitsPreference !== undefined || d.safeZHeight !== undefined) refreshAppSettings();
+  });
+  // dialog-core fires this each time the Explorer tab is shown
+  window.addEventListener('gcode-explorer-show', function () { refreshAppSettings(); });
+
+  function buildLoadStatus() {
+    var sz = (appSettings && appSettings.safeZHeight !== undefined) ? Number(appSettings.safeZHeight) : -5;
+    return 'Loaded ' + parsed.totalLines + ' lines, ' + parsed.segments.length + ' motion segments' +
+      (parsed.units === 'G20' ? ' (inch file)' : '') + '. Safe Z Retract Height: ' + mc(sz) + ' ' + uLen() + ' (app setting).';
+  }
   // The yellow target marker always shows the CURRENT target: the creep
   // position on the selected line, a contour vertex, or a snapped point
   // from the context menu. "Rapid to Point" goes wherever it is.
@@ -2313,7 +2432,9 @@
     ctxMenuEl.innerHTML = '';
     var coords = document.createElement('div');
     coords.className = 'gn-ctx-coords';
-    coords.textContent = 'X' + world.x.toFixed(3) + '  Y' + world.y.toFixed(3);
+    coords.textContent = (viewMode === 'rotary')
+      ? 'X' + fc(world.x) + ' ' + uLen() + '  A' + (world.y / (rotaryK || 1)).toFixed(2) + '\u00b0'
+      : 'X' + fc(world.x) + '  Y' + fc(world.y) + ' ' + uLen();
     ctxMenuEl.appendChild(coords);
     items.forEach(function (item) {
       var el = document.createElement('div');
@@ -2470,12 +2591,12 @@
       : 'Rapid to this point';
     items.push({ label: rapidLabel, action: function () {
       confirmMotion('Rapid to Point',
-        'The machine will move to <b>X' + snap.x.toFixed(3) + ' Y' + snap.y.toFixed(3) + '</b>' +
+        'The machine will move to <b>X' + fc(snap.x) + ' Y' + fc(snap.y) + ' ' + uLen() + '</b>' +
         (document.getElementById('gn-raisez').checked ? ', raising Z to safe height first.' : ' <b>without raising Z first</b>.'),
         'Move')
         .then(function (ok) {
           if (!ok) return;
-          return sendCommand(rapidToPointCmd({ x: snap.x, y: snap.y }), rapidLabel + ' X' + snap.x.toFixed(3) + ' Y' + snap.y.toFixed(3) + ' (G-code Navigator)');
+          return sendCommand(rapidToPointCmd({ x: snap.x, y: snap.y }), rapidLabel + ' X' + fc(snap.x) + ' Y' + fc(snap.y) + ' (G-code Explorer)');
         })
         .catch(function (err) { document.getElementById('gn-line-error').textContent = err.message; });
     }});
@@ -2523,6 +2644,7 @@
       .then(function (results) {
         gcodeText = results[0];
         appSettings = results[1] || {};
+        applyUnits(appSettings.unitsPreference === 'imperial');
         return parseGcodeAsync(gcodeText, function (done, total) {
           if (total > 200000) {
             setStatus('Parsing ' + done.toLocaleString() + ' / ' + total.toLocaleString() + ' lines (' + Math.round(done / total * 100) + '%)\u2026');
@@ -2541,8 +2663,7 @@
         } else if (!parsed.hasRotary && viewMode === 'rotary') {
           setViewMode('xy');
         }
-        loadStatus = 'Loaded ' + parsed.totalLines + ' lines, ' + parsed.segments.length + ' motion segments. Safe Z Retract Height: ' +
-          (appSettings.safeZHeight !== undefined ? appSettings.safeZHeight : -5) + ' mm (app setting).';
+        loadStatus = buildLoadStatus();
         rebuildLegend();
         initZFilter();
         // Select the first motion segment so the map highlight and LINE
@@ -2592,7 +2713,7 @@
     var enabled = document.getElementById('gn-preset-z-toggle').checked;
     if (!enabled) return null;
     var v = parseFloat(document.getElementById('gn-preset-z-input').value);
-    return isNaN(v) ? null : v;
+    return isNaN(v) ? null : appToMm(v); // typed in app units; Z values here are mm
   }
 
   function safeZValue() {
@@ -2601,13 +2722,13 @@
     return (appSettings && appSettings.safeZHeight !== undefined) ? appSettings.safeZHeight : -5;
   }
 
-  // Coordinates we send come straight from the loaded file, so motion
-  // commands carry the file's own units mode (G20/G21, when declared) plus
-  // G90 absolute. Safe-Z retracts use G21 explicitly because ncSender's
-  // safeZHeight app setting is always mm.
+  // Motion commands use the app's unit mode (see Units above): file
+  // coordinates are converted with fc(), mm values (Safe Z) with mc().
   function motionPrefix() {
-    var u = (parsed && parsed.units) ? parsed.units + ' ' : '';
-    return u + 'G90 ';
+    return unitCode() + ' G90 ';
+  }
+  function safeZCmd(zMm) {
+    return unitCode() + ' G90 G53 G0 Z' + mc(zMm);
   }
 
   // LINE ANALYSIS (client-side, per the mockup): raw G-code of the selected
@@ -2636,14 +2757,16 @@
       ' <span style="opacity:0.6;font-size:10.5px;" title="This line does not set Z - the value is carried from an earlier line">(Z inferred)</span>';
     var t = targetOverride ? null : creepFraction();
     var ptZ = t === null ? sSeg.z1 : sSeg.z0 + (sSeg.z1 - sSeg.z0) * t;
+    // coordinates in the app's units (A stays in degrees)
+    var uTag = ' <span style="opacity:0.6;font-size:10.5px;">' + uLen() + '</span>';
     if (sSeg.aSrc) {
-      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.aSrc.x0.toFixed(3) + ' A' + sSeg.aSrc.a0.toFixed(3) + ' Z' + sSeg.aSrc.z0.toFixed(3));
-      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3) + ' Z' + ptZ.toFixed(3));
-      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + sSeg.aSrc.x1.toFixed(3) + ' A' + sSeg.aSrc.a1.toFixed(3) + ' Z' + sSeg.aSrc.z1.toFixed(3)) + zNote;
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + fc(sSeg.aSrc.x0) + ' A' + sSeg.aSrc.a0.toFixed(3) + ' Z' + fc(sSeg.aSrc.z0)) + uTag;
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + fc(pt.x) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3) + ' Z' + fc(ptZ)) + uTag;
+      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + fc(sSeg.aSrc.x1) + ' A' + sSeg.aSrc.a1.toFixed(3) + ' Z' + fc(sSeg.aSrc.z1)) + uTag + zNote;
     } else {
-      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + sSeg.x0.toFixed(3) + ' Y' + sSeg.y0.toFixed(3) + ' Z' + sSeg.z0.toFixed(3));
-      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + ' Z' + ptZ.toFixed(3));
-      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + sSeg.x1.toFixed(3) + ' Y' + sSeg.y1.toFixed(3) + ' Z' + sSeg.z1.toFixed(3)) + zNote;
+      document.getElementById('gn-an-start').innerHTML = 'Start: ' + copyChip('X' + fc(sSeg.x0) + ' Y' + fc(sSeg.y0) + ' Z' + fc(sSeg.z0)) + uTag;
+      document.getElementById('gn-an-point').innerHTML = 'Point: ' + copyChip('X' + fc(pt.x) + ' Y' + fc(pt.y) + ' Z' + fc(ptZ)) + uTag;
+      document.getElementById('gn-an-end').innerHTML = 'End: ' + copyChip('X' + fc(sSeg.x1) + ' Y' + fc(sSeg.y1) + ' Z' + fc(sSeg.z1)) + uTag + zNote;
     }
   }
 
@@ -2752,6 +2875,18 @@
   }
   document.getElementById('gn-sfl-btn').addEventListener('click', sflOpen);
 
+  // ncSender's resume engine switches to the FILE's units before the
+  // approach and plunge, so those two go over in file units; the
+  // operator typed them in the app's units. fallbackMm: when empty.
+  function sflToFileUnits(id, fallbackMm) {
+    var v = parseFloat(document.getElementById(id).value);
+    var mm = (isFinite(v) && v > 0) ? appToMm(v) : fallbackMm;
+    var st = sflAnalysis && sflAnalysis.state;
+    var fileUnits = (st && (st.units || st.Units)) || (parsed && parsed.units) || 'G21';
+    var out = fileUnits === 'G20' ? mm / 25.4 : mm;
+    return Math.round(out * 10000) / 10000;
+  }
+
   document.getElementById('gn-sfl-cancel').addEventListener('click', sflHide);
 
   document.getElementById('gn-sfl-go').addEventListener('click', function () {
@@ -2768,8 +2903,8 @@
         startLine: sflAnalysis.lineNumber,
         skipToolCheck: false,
         spindleDelaySec: parseFloat(document.getElementById('gn-sfl-delay').value) || 0,
-        approachHeight: parseFloat(document.getElementById('gn-sfl-approach').value) || 5,
-        plungeFeedRate: parseFloat(document.getElementById('gn-sfl-plunge').value) || 500
+        approachHeight: sflToFileUnits('gn-sfl-approach', 5),
+        plungeFeedRate: sflToFileUnits('gn-sfl-plunge', 500)
       })
     }).then(function (res) {
       goBtn.disabled = false;
@@ -2809,10 +2944,10 @@
   document.getElementById('gn-retract-btn').addEventListener('click', function () {
     var z = Number(safeZValue());
     confirmMotion('Retract to Safe Z',
-      'The machine will raise Z to <b>' + z.toFixed(3) + ' mm</b> (machine coordinates).', 'Retract')
+      'The machine will raise Z to <b>' + mc(z) + ' ' + uLen() + '</b> (machine coordinates).', 'Retract')
       .then(function (ok) {
         if (!ok) return;
-        return sendCommand('G21 G90 G53 G0 Z' + z.toFixed(3), 'Retract to Z' + z + ' (G-code Navigator)');
+        return sendCommand(safeZCmd(z), 'Retract to Z' + mc(z) + ' (G-code Explorer)');
       })
       .catch(function (err) { document.getElementById('gn-line-error').textContent = err.message; });
   });
@@ -2821,13 +2956,13 @@
   function rapidToPointCmd(pt) {
     var cmds = [];
     if (document.getElementById('gn-raisez').checked) {
-      cmds.push('G21 G90 G53 G0 Z' + Number(safeZValue()).toFixed(3));
+      cmds.push(safeZCmd(Number(safeZValue())));
     }
     if (viewMode === 'rotary') {
       // unwrapped view: vertical axis is A (view-units = rotaryK per degree)
-      cmds.push(motionPrefix() + 'G0 X' + pt.x.toFixed(3) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3));
+      cmds.push(motionPrefix() + 'G0 X' + fc(pt.x) + ' A' + (pt.y / (rotaryK || 1)).toFixed(3));
     } else {
-      cmds.push(motionPrefix() + 'G0 X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3));
+      cmds.push(motionPrefix() + 'G0 X' + fc(pt.x) + ' Y' + fc(pt.y));
     }
     return cmds.join('\n');
   }
@@ -2838,12 +2973,12 @@
     var pt = targetOverride || (selectedSegment ? creepPoint(selectedSegment, creepFraction()) : null);
     if (!pt) { lineErr.textContent = 'No target: select a line, move the creep slider, or pick a point from the map menu.'; return; }
     confirmMotion('Rapid to Point',
-      'The machine will move to <b>X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + '</b>' +
+      'The machine will move to <b>X' + fc(pt.x) + ' Y' + fc(pt.y) + ' ' + uLen() + '</b>' +
       (document.getElementById('gn-raisez').checked ? ', raising Z to safe height first.' : ' <b>without raising Z first</b>.'),
       'Move')
       .then(function (ok) {
         if (!ok) return;
-        return sendCommand(rapidToPointCmd(pt), 'Rapid to point X' + pt.x.toFixed(3) + ' Y' + pt.y.toFixed(3) + ' (G-code Navigator)');
+        return sendCommand(rapidToPointCmd(pt), 'Rapid to point X' + fc(pt.x) + ' Y' + fc(pt.y) + ' (G-code Explorer)');
       })
       .catch(function (err) { lineErr.textContent = err.message; });
   });
@@ -3139,13 +3274,16 @@
   // (inch) files the crosshair must divide by 25.4 or it lands 25.4x off
   // and "drifts" every jog — the sync bug you observed.
   var fileUnitsScale = 1; // mm per file unit (25.4 when the file is G20)
-  var JOG_FEED_Z_CAP = 1200;
+  var JOG_FEED_Z_CAP_MM = 1200;
+  // jog feeds and distances are in the app's units (see Units)
   function jogFeedXY() {
     var sel = document.getElementById('gn-jog-feed');
-    var v = sel ? parseInt(sel.value, 10) : 2000;
-    return isNaN(v) ? 2000 : v;
+    var v = sel ? parseFloat(sel.value) : NaN;
+    return isNaN(v) ? Math.round(mmToApp(2000)) : v;
   }
-  var CONT_DIST = 800; // continuous jog travel cap (mm); released -> 0x85 cancel
+  function jogFeedZCap() { return Math.floor(mmToApp(JOG_FEED_Z_CAP_MM)); }
+  var CONT_DIST_MM = 800; // continuous jog travel cap; released -> 0x85 cancel
+  function contDist() { return roundTo(mmToApp(CONT_DIST_MM), 2); }
 
   function jogMsg(text) {
     var el = document.getElementById('gn-jog-msg');
@@ -3183,10 +3321,10 @@
   }
 
   function jogCommandFor(dxs, dys, dzs, dist) {
-    var cmd = '$J=G91 G21';
-    if (dxs) cmd += ' X' + (dxs * dist);
-    if (dys) cmd += ' Y' + (dys * dist);
-    cmd += dzs ? (' Z' + (dzs * dist) + ' F' + Math.min(jogFeedXY(), JOG_FEED_Z_CAP)) : (' F' + jogFeedXY());
+    var cmd = '$J=G91 ' + unitCode();
+    if (dxs) cmd += ' X' + roundTo(dxs * dist, 4);
+    if (dys) cmd += ' Y' + roundTo(dys * dist, 4);
+    cmd += dzs ? (' Z' + roundTo(dzs * dist, 4) + ' F' + Math.min(jogFeedXY(), jogFeedZCap())) : (' F' + jogFeedXY());
     return cmd;
   }
 
@@ -3258,7 +3396,7 @@
       if (jogHold !== hold) return;
       hold.continuous = true;
       b.classList.add('gn-jogging');
-      sendMachine(jogCommandFor(dxs, dys, dzs, CONT_DIST)).catch(function () {
+      sendMachine(jogCommandFor(dxs, dys, dzs, contDist())).catch(function () {
         if (jogHold === hold) { jogHold = null; b.classList.remove('gn-jogging'); }
       });
     }, 280);
@@ -3286,12 +3424,10 @@
       lastMachine = { status: ms.Status || ms.status || '?', wx: pp[0] || 0, wy: pp[1] || 0, wz: pp[2] || 0, wa: pp.length > 3 && isFinite(pp[3]) ? pp[3] : null };
       var droEl = document.getElementById('gn-dro');
       if (droEl) {
-        var us = fileUnitsScale || 1;
-        var dp = us > 1 ? 3 : 2; // inches deserve an extra decimal
         droEl.textContent =
-          lastMachine.status + ' \u00b7 X' + (lastMachine.wx / us).toFixed(dp) +
-          ' Y' + (lastMachine.wy / us).toFixed(dp) +
-          ' Z' + (lastMachine.wz / us).toFixed(dp) + (us > 1 ? ' in' : ' mm');
+          lastMachine.status + ' \u00b7 X' + mc(lastMachine.wx) +
+          ' Y' + mc(lastMachine.wy) +
+          ' Z' + mc(lastMachine.wz) + ' ' + uLen();
       }
       syncSpindleMarker();
     }).catch(function () { /* transient poll errors are fine */ });
@@ -3323,7 +3459,9 @@
 
   function rotaryScale() {
     var dia = parseFloat(document.getElementById('gn-rotary-dia').value);
-    return (isFinite(dia) && dia > 0) ? (Math.PI * dia / 360) : 1;
+    if (!(isFinite(dia) && dia > 0)) return 1;
+    var diaFile = appToMm(dia) / (fileUnitsScale || 1);
+    return Math.PI * diaFile / 360;
   }
 
   function getRotaryParsed() {
@@ -3431,6 +3569,13 @@
     return zFiltered(vp);
   }
 
+  function refreshZFilterLabel() {
+    var val = document.getElementById('gn-zfilter-val');
+    if (val && zFilterMax !== null && zFilterMax !== undefined) {
+      val.textContent = fileToApp(zFilterMax).toFixed(appImperial ? 3 : 2) + ' ' + uLen();
+    }
+  }
+
   function initZFilter() {
     var wrap = document.getElementById('gn-zfilter-wrap');
     var slider = document.getElementById('gn-zfilter');
@@ -3449,7 +3594,7 @@
     slider.addEventListener('input', function () {
       var v = parseInt(slider.value, 10);
       if (v >= STEPS) { zFilterMax = null; val.textContent = 'off'; }
-      else { zFilterMax = toZ(v); val.textContent = zFilterMax.toFixed(2); }
+      else { zFilterMax = toZ(v); val.textContent = fileToApp(zFilterMax).toFixed(appImperial ? 3 : 2) + ' ' + uLen(); }
       renderMain();
       contourRefilter();
     });
@@ -3512,23 +3657,24 @@
       var a = hull[i], b = hull[(i + 1) % hull.length];
       perimeter += Math.hypot(b.x - a.x, b.y - a.y);
     }
-    var unitLabel = (parsed && parsed.units === 'G20') ? 'in' : 'mm';
+    var unitLabel = uLen();
+    perimeter = fileToApp(perimeter);
 
     var body = '<b>' + hull.length + ' vertices</b>, perimeter ~<b>' + perimeter.toFixed(1) + ' ' + unitLabel + '</b>.<br>' +
       (raiseZ
-        ? 'Z will be raised to safe height (G53 Z' + safeZ.toFixed(3) + ' mm) first, then '
+        ? 'Z will be raised to safe height (G53 Z' + mc(safeZ) + ' ' + unitLabel + ') first, then '
         : '<b>Z will NOT be raised first</b> \u2014 ') +
       'the spindle rapids around every vertex and returns to the first. Feed hold / Stop halts the trace at any time.';
 
     confirmMotion('Trace Contour Outline', body, 'Trace').then(function (ok) {
       if (!ok) return;
       var cmds = [];
-      if (raiseZ) cmds.push('G21 G90 G53 G0 Z' + safeZ.toFixed(3));
+      if (raiseZ) cmds.push(safeZCmd(safeZ));
       var prefix = motionPrefix();
       hull.forEach(function (p, idx) {
-        cmds.push((idx === 0 ? prefix : '') + 'G0 X' + p.x.toFixed(3) + ' Y' + p.y.toFixed(3));
+        cmds.push((idx === 0 ? prefix : '') + 'G0 X' + fc(p.x) + ' Y' + fc(p.y));
       });
-      cmds.push('G0 X' + hull[0].x.toFixed(3) + ' Y' + hull[0].y.toFixed(3));
+      cmds.push('G0 X' + fc(hull[0].x) + ' Y' + fc(hull[0].y));
       return sendCommand(cmds.join('\n'), 'Trace contour outline (' + hull.length + ' vertices, ~' + perimeter.toFixed(0) + ' ' + unitLabel + ')')
         .then(function () {
           setStatus(loadStatus + ' Tracing contour: ' + hull.length + ' vertices, ~' + perimeter.toFixed(1) + ' ' + unitLabel + ' perimeter.');
@@ -3539,6 +3685,11 @@
   // ============================================================
   // Boot
   // ============================================================
+  // follow the app's units even when no file is loaded yet
+  getSettings().then(function (s) {
+    if (s && !appSettings) appSettings = s;
+    applyUnits(!!(s && s.unitsPreference === 'imperial'));
+  }).catch(function () { applyUnits(false); });
   loadGcodeAndSettings();
 })();
 </script>

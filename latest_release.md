@@ -1,24 +1,12 @@
 ## What's Changed
 
-### 🧭 Knows which controller you have
-ncSender now drives classic **Grbl 1.1** and **FluidNC** as well as grblHAL, and G-code Explorer follows along:
-- Every G/M-code and `$` command shows a **Controllers** row: ✓ runs, ◐ runs with limits, ↻ ncSender handles it for you, ✗ not supported, for grblHAL, Grbl 1.1 and FluidNC
-- Codes the connected controller can't run are marked **not on this controller**, with the reason (e.g. `G43 H` on Grbl: "use G43.1 Z<offset>")
-- The **G-code** tab flags lines your controller can't run, and notes what ncSender does instead (e.g. `M6` on Grbl becomes a "Load tool" pause)
-- Settings that work differently on Grbl 1.1 (`$4`, `$5`, `$10`, `$21`, `$22`, `$32`) explain how. On FluidNC, each numbered setting names the `config.yaml` key to change, since FluidNC's numbered settings are read-only
-- The "not on this controller" explanation for settings now fits Grbl and FluidNC too
-
-### 📚 New entries
-- **`$C`**: check-mode dry run (all controllers)
-- **22 FluidNC commands**: `$CD`, `$SS`, `$CMD`, `$S`, `$SC`, `$L`, `$A`, `$E`, `$MD`/`$ME`, `$Bye`, `$LocalFS/…`, `$SD/…`, `$Config/Filename`, `$Message/Level`, `$PL`, `$GD`, `$Limits`, `$T`, `$RM`, `$RI`, `$Heap`, `$NVX` (long names like `$Config/Dump` work too)
-- **ncSender's pause dialog**: `(MSG, NCSENDER_PAUSE: Title | Message)` before an `M0`
-- **`(MSG, …)` and `(PRINT, …)` / `(DEBUG, …)` comments**, which the G-code tab now recognizes instead of calling them plain comments
-- **`M7.1` / `M8.1`**: FluidNC's separate mist/flood off
-- **Sienci ATCi keepout**: `M960` (was `M810` on older ATCi builds, which still finds it) and settings `$683`–`$687`
-- **Plugin commands**: `$ADB_GOTO` (AutoDustboot), `$PROBE` and `$MEASURE_TLO` (Pneumatic ATC), and Dust Docker's dock/attach/bypass macros and `#<_dust_boot_…>` state
-- **`M98`** now explains ncSender's own macros (P9001–P9999) and the "Use controller macros" switch
-- `$SLOT<n>` now also covers Pneumatic ATC
+### 📏 Explorer tab follows your units
+The Explorer tab now uses the same units as ncSender's main window (Settings → Metric / Imperial), and switches when you change it:
+- **Jog**: steps are 0.01 / 0.1 / 1 in and feeds 20–160 in/min in Imperial (0.1 / 1 / 10 mm and 500–4000 mm/min in Metric), and jogs are sent in those units
+- **Line analysis, map menu and confirmations** show coordinates in your units, labeled, whatever units the G-code file uses
+- **Safe Z**, the custom safe height, the status line, the Z filter and the contour perimeter are shown in your units
+- **Start From Line**: approach and plunge are entered in your units and converted to the file's units for ncSender's resume engine (an inch file no longer gets a 500 in/min plunge from the mm default)
+- **Rotary stock diameter** is entered in your units
 
 ### 🔧 Fixes
-- Setting notes that were in the database but never displayed now show (e.g. where older SLB firmware numbered a setting differently)
-- The G-code tab no longer marks parameter assignments like `#<_depth> = 2.5` as invalid G-code
+- Retract, Rapid to Point and Trace Contour no longer leave the controller in mm mode when ncSender is set to Imperial: moves are sent in your units, as ncSender's own moves are

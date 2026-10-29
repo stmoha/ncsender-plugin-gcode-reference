@@ -1,8 +1,9 @@
 # Releasing G-code Explorer
 
-Releases are nearly hands-off: Claude does the editing, testing and
-committing, you click one prefilled **Publish release** link, and GitHub
-builds the plugin ZIP. Nothing to copy or paste.
+Releases are nearly hands-off: Claude does the editing and testing and
+hands you a test ZIP; once you've tried it in ncSender, Claude commits,
+and you click one prefilled **Publish release** link. GitHub builds the
+release ZIP. Nothing to copy or paste.
 
 Repo: https://github.com/stmoha/ncsender-plugin-gcode-reference
 Local clone (optional): C:\Users\stefa\Documents\GitHub\ncsender-plugin-gcode-reference
@@ -17,7 +18,14 @@ bug or feature. Claude:
   `node build/build.mjs`, and tests the result in a headless browser
 - bumps `manifest.json`'s version and rewrites `latest_release.md`
 
-## 2. Claude commits, you publish
+## 2. You test the ZIP first
+- Claude packages the change exactly like the release workflow does
+  (`com.cncdocs.gcode-reference_vX.Y.Z-test.zip`) and sends it to you
+- ncSender → Settings → Plugins → Install Plugin → upload the ZIP, then
+  hard-refresh (Ctrl+F5) and try the change
+- nothing is on GitHub yet; ask for fixes and you get a new test ZIP
+
+## 3. Claude commits, you publish (after you say the ZIP is good)
 - Claude commits to `main` and pushes
 - Claude can't create tags or releases from its session (GitHub refuses
   them by policy), so it hands you a link to the **new release** page with
@@ -29,7 +37,7 @@ bug or feature. Claude:
   (and posts to Discord if the `DISCORD_WEBHOOK_URL` secret is set)
 - Claude checks that the workflow went green and the ZIP is attached
 
-## 3. You
+## 4. You
 - ncSender → Settings → Plugins shows **Update available** for G-code
   Explorer (it reads this repo's latest release via the manifest's
   `repository` field). Update, hard-refresh (Ctrl+F5), check the version.
