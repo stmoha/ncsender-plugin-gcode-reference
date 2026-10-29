@@ -16,7 +16,11 @@ bug or feature. Claude:
 - works on a fresh clone of this repo — GitHub is always the source of truth
 - edits the sources (`gcode-database.js`, `build/*`), runs
   `node build/build.mjs`, and tests the result in a headless browser
-- bumps `manifest.json`'s version and rewrites `latest_release.md`
+- bumps `manifest.json`'s version and rewrites `latest_release.md`: the
+  new changes first, then, if the previous release went out less than
+  about a week earlier, an "Also new since vX.Y.Z" section rolling up the
+  releases most people won't have installed yet (back to the last release
+  that has been out a while), so anyone updating sees everything they get
 
 ## 2. You test the ZIP first
 - Claude packages the change exactly like the release workflow does
