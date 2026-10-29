@@ -1,5 +1,5 @@
 /**
- * Build script for the G-code Reference ncSender plugin.
+ * Build script for the G-code Explorer ncSender plugin.
  * Assembles:
  *   commands.js  = database (as plain vars) + dialog template string + logic
  *                  (single Jint-compatible file, no imports)
@@ -12,7 +12,29 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const db = await import(join(root, 'gcode-database.js'));
+const src = await import(join(root, 'gcode-database.js'));
+
+// Merge the controller tables into the entries so both outputs carry
+// them: G/M/$ commands get `support`, numbered settings get `ctrl`.
+const withSupport = (list) => list.map((e) => {
+  const s = src.CONTROLLER_SUPPORT[e.code];
+  return s ? { ...e, support: s } : e;
+});
+const withNotes = (list) => list.map((e) => {
+  const n = src.SETTING_NOTES[e.code];
+  return n ? { ...e, ctrl: n } : e;
+});
+const db = {
+  GCODE_DB: withSupport(src.GCODE_DB),
+  SYSTEM_DB: withSupport(src.SYSTEM_DB),
+  SETTINGS_DB: withNotes(src.SETTINGS_DB),
+  LETTER_DB: src.LETTER_DB
+};
+{
+  const codes = new Set([...db.GCODE_DB, ...db.SYSTEM_DB].map((e) => e.code));
+  const missing = [...codes].filter((c) => !src.CONTROLLER_SUPPORT[c]);
+  if (missing.length) console.warn('note: no controller-support row for', missing.join(' '));
+}
 
 let dialogCore = readFileSync(join(root, 'build/dialog-core.html'), 'utf8');
 
@@ -46,7 +68,7 @@ const safeJson = (v) => JSON.stringify(v).split('</').join('<\\/');
 
 // ---------- commands.js ----------
 const header = `/**
- * G-code & grblHAL Reference - ncSender plugin (commands file)
+ * G-code Explorer - ncSender plugin (commands file)
  * ------------------------------------------------------------------
  * GENERATED FILE - edit gcode-database.js / build/*.js|html and re-run
  * \`node build/build.mjs\`. Runs inside ncSender's embedded Jint engine:

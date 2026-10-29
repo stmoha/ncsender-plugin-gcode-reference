@@ -1,60 +1,57 @@
-# Release Checklist — G-code & grblHAL Reference
+# Releasing G-code Explorer
 
-Claude Desktop now has direct access to this repo folder, so releases are
-three steps: describe → review/push → publish.
+Releases are hands-off: Claude does the editing, testing, committing and
+publishing, and GitHub builds the plugin ZIP. Nothing to copy, paste or
+click on github.com.
 
 Repo: https://github.com/stmoha/ncsender-plugin-gcode-reference
-Clone: C:\Users\stefa\Documents\GitHub\ncsender-plugin-gcode-reference
-(keep it on a plain local path — never inside Google Drive / OneDrive)
+Local clone (optional): C:\Users\stefa\Documents\GitHub\ncsender-plugin-gcode-reference
 
 ---
 
-## Step 1 — Tell Claude what you want changed
-Describe the bug or feature in Claude Desktop. Claude:
-- re-syncs from GitHub if needed (its own workspace resets between chats —
-  this repo on GitHub is always the source of truth)
-- edits the files **directly in this folder**
-- builds (`build/` sources → `commands.js` + `config.html`) and tests in its
-  sandbox before writing anything here
+## 1. Ask for the change
+In a Claude session with this repo attached (push access), describe the
+bug or feature. Claude:
+- works on a fresh clone of this repo — GitHub is always the source of truth
+- edits the sources (`gcode-database.js`, `build/*`), runs
+  `node build/build.mjs`, and tests the result in a headless browser
 - bumps `manifest.json`'s version and rewrites `latest_release.md`
 
-When Claude says it's done, the changes are already on disk here.
+## 2. Claude publishes
+- commits to `main` and pushes
+- pushes the tag `vX.Y.Z` (same number as `manifest.json`)
+- the **Build and Release Plugin** workflow then rebuilds the generated
+  files, packages `com.cncdocs.gcode-reference_vX.Y.Z.zip`, and creates the
+  release with `latest_release.md` as its notes (and posts to Discord if
+  the `DISCORD_WEBHOOK_URL` secret is set)
+- Claude checks that the workflow went green and the ZIP is attached
 
-## Step 2 — Review, commit, push in GitHub Desktop
-1. Open GitHub Desktop — the changed files appear with diffs; skim them
-2. Sanity check: `manifest.json` shows the new version
-3. Short commit message → **Commit to main** → **Push origin**
+## 3. You
+- ncSender → Settings → Plugins shows **Update available** for G-code
+  Explorer (it reads this repo's latest release via the manifest's
+  `repository` field). Update, hard-refresh (Ctrl+F5), check the version.
+- If you also edit locally: GitHub Desktop → **Fetch origin** → **Pull
+  origin** to bring the clone up to date before changing anything.
 
-## Step 3 — Publish the release (this triggers the build robot)
-1. github.com repo → **Releases** → **Draft a new release**
-2. **Choose a tag** → type the new version like `v1.19.0` (the `v` matters)
-   → **Create new tag on publish**
-3. Title: `G-code & grblHAL Reference v1.19.0`
-4. Description: paste the contents of `latest_release.md`
-5. **Publish release**
-
-## Step 4 — Verify
-1. **Actions** tab → green check (~1 min)
-2. **Releases** → `com.cncdocs.gcode-reference_v1.19.0.zip` under Assets
-3. ncSender → Settings → Plugins shows an **Update available** badge
-   (it checks this repo's latest GitHub release via the manifest's
-   `repository` field) — update, then hard-refresh the browser (Ctrl+F5)
-   and confirm the new version number
-
-## Done
-- No registry PR needed per release — updates flow straight from GitHub
-  releases to every user. The registry listing's version text is cosmetic;
-  refresh it with a PR every handful of releases if you like.
+## Registry listing
+Updates reach users straight from GitHub releases, so no registry change
+is needed per release. The listing's name/version text in
+`siganberg/ncSender.plugins-registry` is cosmetic; Claude can open a PR
+from the `stmoha` fork when it's worth refreshing.
 
 ---
 
+## Doing it by hand (fallback)
+1. Edit, then `node build/build.mjs`
+2. Bump `manifest.json` version, update `latest_release.md`
+3. Commit and push to `main` (GitHub Desktop is fine)
+4. Push a tag `vX.Y.Z` — or on github.com: Releases → Draft a new release
+   → new tag `vX.Y.Z` → paste `latest_release.md` → Publish. Either way
+   the workflow attaches the ZIP.
+
 ## If something looks wrong
-- **No .zip after publishing:** Actions tab → red X → screenshot the log
-  for Claude
+- **No ZIP on the release:** Actions tab → the red run → its log
 - **Update installed but looks unchanged:** hard-refresh (Ctrl+F5), check
-  version in Settings → Plugins — usually a cached UI
-- **Claude Desktop can't see this folder:** Settings → Extensions →
-  Filesystem → confirm this path is still allowed; fully quit (system
-  tray → Quit) and restart the app if reads hang
-- **GitHub Desktop acting weird:** confirm the clone is still on a plain
-  local path, not a synced folder
+  the version in Settings → Plugins — usually a cached UI
+- **GitHub Desktop acting weird:** keep the clone on a plain local path,
+  never inside Google Drive / OneDrive

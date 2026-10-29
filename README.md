@@ -2,9 +2,9 @@
 
 *(formerly "G-code & grblHAL Reference" — same plugin id, updates continue seamlessly)* — ncSender Plugin
 
-Inline G-code, M-code and grblHAL `$`-setting documentation inside [ncSender](https://github.com/siganberg/ncSender), inspired by OctoPrint's Marlin G-code Documentation plugin. Look commands up straight from the Console, get any line of G-code explained word by word (the **G-code** tab), cross-check every setting against your actual controller, and browse the official ncSender manual — all without leaving the sender.
+Inline G-code, M-code and `$`-setting documentation for grblHAL, classic Grbl 1.1 and FluidNC inside [ncSender](https://github.com/siganberg/ncSender), inspired by OctoPrint's Marlin G-code Documentation plugin. Look commands up straight from the Console, get any line of G-code explained word by word (the **G-code** tab), cross-check every setting against your actual controller, and browse the official ncSender manual — all without leaving the sender.
 
-> Written for the grblHAL dialect, with first-class coverage of the Sienci SLB / SLB-EXT (including Main_grblHAL firmware 20260525 numbering and legacy 5.0.x notes). See *Controller applicability* below for other boards.
+> Written for the grblHAL dialect, with first-class coverage of the Sienci SLB / SLB-EXT (including Main_grblHAL firmware 20260525 numbering and legacy 5.0.x notes). Every entry also says how it fares on classic Grbl 1.1 and FluidNC — see *Controller applicability* below.
 
 ## Features
 
@@ -18,15 +18,15 @@ Inline G-code, M-code and grblHAL `$`-setting documentation inside [ncSender](ht
 
 A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macro-sourced lines are never touched.
 
-**Reference browser** — 360+ entries with search, per-category color-keyed filters, syntax, parameter tables, examples and tips. Covers the grblHAL core dialect (motion, coordinate systems, probing, canned cycles, G65 built-in macros), common plugin M-codes, grblHAL `$` system commands, and **251 numbered settings through $772** with SLB-EXT factory defaults.
+**Reference browser** — 400+ entries with search, per-category color-keyed filters, syntax, parameter tables, examples and tips. Covers the grblHAL core dialect (motion, coordinate systems, probing, canned cycles, G65 built-in macros), common plugin M-codes, ncSender's own codes (macros, the `NCSENDER_PAUSE` dialog), ncSender plugin commands (`$TLS`, `$SLOT<n>`, `$PROBE`, `$MEASURE_TLO`, `$ADB_…`, Dust Docker), grblHAL and FluidNC `$` system commands, and **256 numbered settings through $772** with SLB-EXT factory defaults.
 
 <img width="997" height="637" alt="2026-07-12_16h15_29" src="https://github.com/user-attachments/assets/b29999d9-fc66-482f-aa44-da62158bb5ad" />
 
-**Live controller cross-check** — the plugin reads ncSender's cached `$ES`/`$$` enumeration (`/api/firmware`) and flags settings that don't exist on *your* firmware build, while showing the live current value of the ones that do.
+**Live controller cross-check** — the plugin reads `/api/firmware` to learn which controller is connected (grblHAL, Grbl 1.1 or FluidNC) and its settings list. It flags settings that don't exist on *your* firmware build, shows the live value of the ones that do, and marks G/M/`$` codes your controller can't run, with the reason. Each entry's **Controllers** row shows all three at a glance.
 
-**Explorer tab** — an interactive 2D map of the loaded toolpath. Snap to G-code lines graphically and jog the machine to them with safe-Z handling, trace a rubber-band outline of the cut area, and unwrap 4th-axis jobs to see rotary toolpaths flat. Also opens directly via **Tools → G-code Navigator**.
+**Explorer tab** — an interactive 2D map of the loaded toolpath. Snap to G-code lines graphically and jog the machine to them with safe-Z handling, trace a rubber-band outline of the cut area, and unwrap 4th-axis jobs to see rotary toolpaths flat. Open **Tools → G-code Explorer** and pick the Explorer tab.
 
-**Explain a line** — paste a whole program and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, `G10 L2`/`L20` combos, `G01`→`G1` normalization, and both comment styles.
+**G-code tab (explain a line)** — paste a whole program, or use the loaded file, and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, FluidNC `$Long/Names`, `G10 L2`/`L20` combos, `G01`→`G1` normalization, parameter assignments, `(MSG, …)` / `(PRINT, …)` / `NCSENDER_PAUSE` comments, and both comment styles. With a controller connected, lines it can't run are flagged.
 
 **Manual tab** — the [official ncSender manual](https://siganberg.github.io/ncSender.manual/) embedded right in the dialog.
 
@@ -34,7 +34,7 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 ## Installation
 
-**From the ncSender plugin registry** (once listed): in ncSender go to **Settings → Plugins → Install Plugin** and pick *G-code & grblHAL Reference*.
+**From the ncSender plugin registry**: in ncSender go to **Settings → Plugins → Install Plugin** and pick *G-code Explorer*. Installed copies update themselves from this repo's releases.
 
 **From a release ZIP**: download the latest `com.cncdocs.gcode-reference_vX.Y.Z.zip` from the
 [releases page](https://github.com/stmoha/ncsender-plugin-gcode-reference/releases),
@@ -42,21 +42,22 @@ then in ncSender: **Settings → Plugins → Install Plugin** → upload the ZIP
 
 ## Controller applicability
 
-- **Sienci SLB / SLB-EXT (grblHAL)** — fully covered; defaults labeled, Sienci-specific settings included, Main_grblHAL renumbering noted (e.g. laser XY offset $741/$742 → $770/$771, laser signal invert $743 → $716).
+- **Sienci SLB / SLB-EXT (grblHAL)** — fully covered; defaults labeled, Sienci-specific settings included (button macros, LEDs, spindle slots, ATCi keepout `$683`–`$687`), Main_grblHAL renumbering noted (e.g. laser XY offset $741/$742 → $770/$771, laser signal invert $743 → $716).
 - **Other grblHAL boards** — core G/M-codes and settings apply; Sienci-specific entries are simply flagged "not on this controller" by the live check.
-- **FluidNC** — basic G-code entries mostly apply, but numbered `$` settings don't exist there (YAML config + `$/` tree commands); the live check reports settings unavailable.
-- **Classic Grbl 1.1** — $0–$132 and core codes align; the rest is grblHAL-only.
+- **Classic Grbl 1.1** — ncSender translates for it (expressions, parameters and o-word IF/ELSE worked out by ncSender, `M6` turned into a "load tool" pause) and stops what Grbl can't run (`M62`–`M68`, `G43 H`, `G59.1`–`G59.3`, `G65`, override control, loops). The entries say which codes run, which ncSender handles, and how `$4`, `$5`, `$10`, `$21`, `$22` and `$32` differ.
+- **FluidNC** — runs most grblHAL G-code as written (expressions, o-word flow control, `M62`–`M68` with pins in config.yaml, `M70`–`M73`); no canned cycles, tool table or `G65`. Its numbered settings are read-only copies of `config.yaml`, so their entries name the key to change. FluidNC's own `$` commands are included.
 
 ## Documentation sources
 
-Compiled from the [Sienci Labs SLB firmware documentation](https://resources.sienci.com/view/slb-firmware-flashing/), the [grblHAL core source](https://github.com/grblHAL/core) (canonical setting registry), and the [grblHAL community docs](https://petervanderwalt.github.io/grblhal_docs/). Concept inspired by the [OctoPrint Marlin G-code Documentation plugin](https://plugins.octoprint.org/plugins/marlingcodedocumentation/).
+Compiled from the [Sienci Labs SLB firmware documentation](https://resources.sienci.com/view/slb-firmware-flashing/), the [grblHAL core source](https://github.com/grblHAL/core) (canonical setting registry), the [grblHAL community docs](https://petervanderwalt.github.io/grblhal_docs/), the [Grbl 1.1 wiki](https://github.com/gnea/grbl/wiki), the [FluidNC source](https://github.com/bdring/FluidNC), the [Sienci ATCi plugin](https://github.com/Sienci-Labs/sienci-atci-plugin), ncSender's Grbl/FluidNC support, and the ncSender plugin repositories for plugin commands. Descriptions are written in our own words. Concept inspired by the [OctoPrint Marlin G-code Documentation plugin](https://plugins.octoprint.org/plugins/marlingcodedocumentation/).
 
 ## Development
 
 `commands.js` (the pro-v2 embedded-engine logic) and `config.html` are **generated** — edit the sources and rebuild:
 
-- `gcode-database.js` — the documentation database (entry `params` drive the line explainer, `keywords` drive search)
-- `build/dialog-core.html` — the shared UI (all four tabs)
+- `gcode-database.js` — the documentation database (entry `params` drive the line explainer, `keywords` drive search; `CONTROLLER_SUPPORT` and `SETTING_NOTES` hold the Grbl 1.1 / FluidNC differences)
+- `build/dialog-core.html` — the shared UI (all tabs)
+- `build/navigator-panel.html` — the Explorer tab (2D toolpath map)
 - `build/commands-logic.js` — terminal interception logic
 - `build/config-template.html` — thin wrapper choosing the default tab per context
 
@@ -68,11 +69,7 @@ node build/build.mjs
 
 ### Releasing
 
-```bash
-./.scripts/release.sh
-```
-
-Bumps the patch version in `manifest.json`, generates release notes, commits, tags, and pushes — the GitHub Actions pipeline then rebuilds the generated files, packages `<plugin-id>_<tag>.zip`, and publishes the release.
+Push a version tag (`vX.Y.Z`, matching `manifest.json`) and the GitHub Actions pipeline rebuilds the generated files, packages `<plugin-id>_<tag>.zip`, and publishes the release using `latest_release.md` as the notes. See [RELEASING.md](RELEASING.md) for the full checklist. `./.scripts/release.sh` does the bump-commit-tag-push in one go from a terminal.
 
 ## Credits
 

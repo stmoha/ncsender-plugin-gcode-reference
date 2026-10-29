@@ -169,18 +169,20 @@
             <li><a href="https://resources.sienci.com/view/slb-firmware-flashing/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Sienci Labs SLB/SLB&#8209;EXT firmware documentation</a> &mdash; the official settings tables, including SLB&#8209;EXT factory defaults and Sienci&rsquo;s &ldquo;unused&rdquo;/&ldquo;advanced&rdquo; notes.</li>
             <li><a href="https://github.com/grblHAL/core" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">grblHAL core source</a> &mdash; the canonical setting registry and descriptions for mainline (Main_grblHAL) builds, including settings the Sienci tables don&rsquo;t cover and the current numbering (e.g. laser XY offset at $770/$771, formerly $741/$742 on SLB 5.0.x firmware).</li>
             <li><a href="https://petervanderwalt.github.io/grblhal_docs/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">grblHAL community docs</a> &mdash; the complete G&#8209;code and M&#8209;code reference the command entries are based on.</li>
-            <li><a href="https://github.com/siganberg/ncSender" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">ncSender</a> &mdash; the plugin API, and the <code>/api/firmware</code> endpoint (ncSender&rsquo;s cache of your controller&rsquo;s own <code>$ES</code>/<code>$$</code> enumeration) that powers the live &ldquo;on this controller&rdquo; check.</li>
+            <li><a href="https://github.com/siganberg/ncSender" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">ncSender</a> &mdash; the plugin API, and the <code>/api/firmware</code> endpoint (which controller is connected, plus ncSender&rsquo;s cache of its own <code>$ES</code>/<code>$$</code> settings list) that powers the live &ldquo;on this controller&rdquo; check.</li>
             <li><a href="https://plugins.octoprint.org/plugins/marlingcodedocumentation/" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">OctoPrint Marlin G&#8209;code Documentation</a> &mdash; the plugin that inspired this one.</li>
-            <li><a href="https://github.com/siganberg/ncsender-plugin-rapidchangeatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Rapid Change ATC</a>, <a href="https://github.com/siganberg/ncsender-plugin-manualtoolchanger" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Manual Tool Changer</a>, <a href="https://github.com/siganberg/ncsender-plugin-pneumaticatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Pneumatic ATC</a> and <a href="https://github.com/siganberg/ncsender-plugin-autodustboot" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">AutoDustboot</a> plugin repositories &mdash; the source for the console commands documented under <em>Plugin codes</em> (<code>$TLS</code>, <code>$SLOT&lt;n&gt;</code>, <code>$POCKET1</code>, <code>$ADB_RETRACT</code>/<code>$ADB_EXPAND</code>).</li>
+            <li><a href="https://github.com/siganberg/ncsender-plugin-rapidchangeatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Rapid Change ATC</a>, <a href="https://github.com/siganberg/ncsender-plugin-manualtoolchanger" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Manual Tool Changer</a>, <a href="https://github.com/siganberg/ncsender-plugin-pneumaticatc" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Pneumatic ATC</a>, <a href="https://github.com/siganberg/ncsender-plugin-autodustboot" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">AutoDustboot</a> and <a href="https://github.com/slgreen22/ncsender-plugin-dustdocker-dustboot" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Dust Docker</a> plugin repositories &mdash; the source for the commands documented under <em>Plugin codes</em> (<code>$TLS</code>, <code>$SLOT&lt;n&gt;</code>, <code>$POCKET1</code>, <code>$PROBE</code>, <code>$MEASURE_TLO</code>, <code>$ADB_&hellip;</code>, the Dust Docker macros).</li>
+            <li><a href="https://github.com/gnea/grbl/wiki" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Grbl 1.1 wiki</a>, the <a href="https://github.com/bdring/FluidNC" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">FluidNC source</a> and ncSender&rsquo;s Grbl/FluidNC translators &mdash; which codes run on each controller.</li>
+            <li><a href="https://github.com/Sienci-Labs/sienci-atci-plugin" target="_blank" rel="noopener" style="color:var(--color-accent,#10b981)">Sienci ATCi plugin</a> &mdash; <code>M960</code> and the keepout settings <code>$683</code>&#8211;<code>$687</code>.</li>
           </ul>
-          <p style="margin:6px 0"><b>Which controllers this applies to.</b> ncSender can drive both grblHAL and FluidNC machines; this reference is written for the grblHAL dialect:</p>
+          <p style="margin:6px 0"><b>Which controllers this applies to.</b> ncSender drives grblHAL, classic Grbl 1.1 and FluidNC. The entries are written for grblHAL; when ncSender is connected the reference knows which one you have, marks codes it can&rsquo;t run &ldquo;not on this controller&rdquo;, and every G/M/$ entry shows how it fares on all three:</p>
           <ul style="margin:4px 0 6px 18px;padding:0">
-            <li><b>Sienci SLB / SLB&#8209;EXT (grblHAL)</b> &mdash; fully covered. Defaults are labeled &ldquo;SLB&#8209;EXT default&rdquo;, Sienci&#8209;specific settings (button macros $450s, ring/rail LEDs $664/$665, spindle slots $511+) are included, and entries note where Main_grblHAL renumbered older SLB 5.0.x settings.</li>
-            <li><b>Other grblHAL boards</b> &mdash; core G/M&#8209;codes and settings apply as documented; Sienci&#8209;specific entries will simply be flagged &ldquo;not on this controller&rdquo; by the live check, since every grblHAL build only exposes the settings its features compile in.</li>
-            <li><b>FluidNC</b> &mdash; the basic G&#8209;code entries (motion, coordinate systems, spindle/coolant M&#8209;codes) largely apply since FluidNC descends from Grbl, but the numbered <code>$</code> settings do <b>not</b>: FluidNC is configured through a YAML file and <code>$/</code> tree commands instead. grblHAL extensions (G65 macros, M62&#8211;M68 I/O, canned cycles, plugin M&#8209;codes, <code>$ES</code>) are unavailable there, and the live controller check will report &ldquo;controller settings unavailable&rdquo;.</li>
-            <li><b>Classic Grbl 1.1</b> &mdash; the $0&#8211;$132 settings and core G/M&#8209;codes align; everything beyond that is grblHAL&#8209;only.</li>
+            <li><b>Sienci SLB / SLB&#8209;EXT (grblHAL)</b> &mdash; fully covered. Defaults are labeled &ldquo;SLB&#8209;EXT default&rdquo;, Sienci&#8209;specific settings (button macros $450s, ring/rail LEDs $664/$665, spindle slots $511+, ATCi keepout $683&#8211;$687) are included, and entries note where Main_grblHAL renumbered older SLB 5.0.x settings.</li>
+            <li><b>Other grblHAL boards</b> &mdash; core G/M&#8209;codes and settings apply as documented; Sienci&#8209;specific entries are simply flagged &ldquo;not on this controller&rdquo;, since every grblHAL build only has the settings its features compile in.</li>
+            <li><b>Classic Grbl 1.1</b> &mdash; ncSender translates for it: it works out expressions, parameters and o&#8209;word IF/ELSE itself, turns M6 into a &ldquo;load tool&rdquo; pause, and stops lines Grbl can&rsquo;t run (M62&#8211;M68 I/O, G43&nbsp;H, G59.1&#8211;59.3, G65, override control, loops) with an explanation. Lines are limited to 79 characters. Only $0&#8211;$132 exist, and a few (like $4, $5, $10, $22, $32) are simpler than on grblHAL &mdash; their entries say how.</li>
+            <li><b>FluidNC</b> &mdash; runs most grblHAL G&#8209;code as written, including expressions, o&#8209;word flow control, M62&#8211;M68 I/O (with pins set up in config.yaml) and M70&#8211;M73. No canned cycles, tool table or G65. Machine setup lives in config.yaml: the numbered settings ncSender sees are read&#8209;only copies, and their entries name the config.yaml key to change. FluidNC&rsquo;s own <code>$</code> commands (<code>$CD</code>, <code>$SS</code>, <code>$LocalFS/&hellip;</code> &hellip;) are under <em>$ Commands</em>.</li>
           </ul>
-          <p style="margin:6px 0;color:var(--color-text-secondary,#9aa4b2)">The live check reads ncSender&rsquo;s cached controller enumeration &mdash; after flashing new firmware, refresh ncSender&rsquo;s Firmware tab once so the cache re&#8209;queries, and this reference picks it up on next open.</p>
+          <p style="margin:6px 0;color:var(--color-text-secondary,#9aa4b2)">The live check reads ncSender&rsquo;s cached copy of your controller&rsquo;s settings (from <code>$ES</code>/<code>$$</code>). After flashing new firmware, refresh ncSender&rsquo;s Firmware tab once so the cache re&#8209;reads them; this reference picks it up the next time it opens.</p>
         </div>
       </div>
     </div>
@@ -203,7 +205,7 @@
   <div class="gref-foot" id="gref-foot">
     Terminal shortcuts: <code>?keyword</code> looks up docs (e.g. <code>?dwell</code>, <code>?$110</code>) &nbsp;&middot;&nbsp;
     <code>??G1 X10 F500</code> explains a line word by word &nbsp;&middot;&nbsp;
-    <code>??</code> on its own opens this reference, unfiltered. Run <code>$ES</code> / <code>$EE</code> / <code>$EA</code> on the controller to enumerate everything your build supports.
+    <code>??</code> on its own opens this reference, unfiltered. To list everything your controller supports, run <code>$ES</code> / <code>$EE</code> / <code>$EA</code> on grblHAL, or <code>$CMD</code> / <code>$E</code> / <code>$A</code> on FluidNC.
   </div>
 </div>
 
@@ -254,12 +256,14 @@
     DATA.settings.forEach(function (e) {
       ALL.push({ _type: 'setting', code: e.code, aliases: [], name: e.name,
                  category: 'setting', modal: null, desc: e.desc, syntax: e.code + '=<value>',
-                 params: {}, example: e.code + '=1', tips: null, keywords: e.keywords });
+                 params: {}, example: e.code + '=1', tips: e.tips || null, keywords: e.keywords,
+                 ctrl: e.ctrl || null });
     });
     DATA.system.forEach(function (e) {
-      ALL.push({ _type: 'system', code: e.code, aliases: [], name: e.name,
-                 category: 'system', modal: null, desc: e.desc, syntax: e.code,
-                 params: {}, example: e.code, tips: null, keywords: e.keywords });
+      ALL.push({ _type: 'system', code: e.code, aliases: e.aliases || [], name: e.name,
+                 category: 'system', modal: null, desc: e.desc, syntax: e.syntax || e.code,
+                 params: e.params || {}, example: e.example || e.code, tips: e.tips || null,
+                 keywords: e.keywords, support: e.support || null });
     });
 
     /* code -> entry lookup map (canonical codes + aliases, uppercased). */
@@ -285,11 +289,15 @@
     }
 
     /* ---------------- controller cross-check ----------------
-       ncSender caches the controller's own $ES/$$ enumeration and serves
-       it at /api/firmware. We use it to flag database settings that do
-       not exist on THIS machine's firmware build, and to show the live
-       value of the ones that do. Fails soft: no data, no flags. */
-    var MACHINE = { state: 'loading', has: {}, values: {}, fw: '' };
+       ncSender serves /api/firmware: which controller family is
+       connected (protocol: grblhal | grbl | fluidnc) and its cached
+       settings list ($ES/$$). We use the settings to flag database
+       settings that don't exist on THIS machine and show live values,
+       and the protocol to mark G/M/$ codes it can't run. Fails soft:
+       no data, no flags. */
+    var MACHINE = { state: 'loading', has: {}, values: {}, fw: '', protocol: null };
+    var CTRL_LABEL = { grblhal: 'grblHAL', grbl: 'Grbl 1.1', fluidnc: 'FluidNC' };
+    var CTRL_ORDER = ['grblhal', 'grbl', 'fluidnc'];
 
     function apiBase() {
       try {
@@ -303,6 +311,11 @@
       return '';
     }
 
+    function rerenderMachineViews() {
+      if (state.tab === 'reference') renderReference();
+      else if (state.tab === 'explain') { try { updateExout(); } catch (e) {} }
+    }
+
     (function loadMachineSettings() {
       if (typeof fetch === 'undefined') { MACHINE.state = 'unavailable'; return; }
       try {
@@ -310,28 +323,132 @@
           .then(function (r) { return r && r.ok ? r.json() : null; })
           .then(function (data) {
             var settings = data && (data.settings || data.Settings);
+            var named = false;
             if (settings && Object.keys(settings).length > 0) {
               Object.keys(settings).forEach(function (k) {
                 if (!/^\d+$/.test(k)) return;
                 MACHINE.has[k] = true;
                 var v = settings[k] || {};
+                if (v.name || v.Name) named = true;
                 var val = (v.value !== undefined && v.value !== null) ? v.value
                         : (v.Value !== undefined && v.Value !== null) ? v.Value : null;
                 if (val !== null) MACHINE.values[k] = String(val);
               });
-              MACHINE.fw = String(data.firmwareVersion || data.FirmwareVersion || '');
               MACHINE.state = 'ready';
             } else {
               MACHINE.state = 'unavailable';
             }
-            if (state.tab === 'reference') renderReference();
+            MACHINE.fw = String((data && (data.firmwareVersion || data.FirmwareVersion)) || '');
+            // Connected: ncSender says which family. Disconnected it sends
+            // null; a cached list with setting names can only have come
+            // from grblHAL's $ES, and FluidNC names itself in its version.
+            var p = data && (data.protocol || data.Protocol);
+            if (p && CTRL_LABEL[p]) MACHINE.protocol = p;
+            else if (/fluidnc/i.test(MACHINE.fw)) MACHINE.protocol = 'fluidnc';
+            else if (named) MACHINE.protocol = 'grblhal';
+            rerenderMachineViews();
           })
           .catch(function () {
             MACHINE.state = 'unavailable';
-            if (state.tab === 'reference') renderReference();
+            rerenderMachineViews();
           });
       } catch (e) { MACHINE.state = 'unavailable'; }
     })();
+
+    /* Support of an entry on one controller family: [status, note].
+       status: yes | part | ncs | plug | no | null (unknown). grblHAL is
+       the baseline the entries are written for, so it defaults to yes. */
+    function supportFor(e, proto) {
+      var s = e.support && e.support[proto];
+      if (s) return s;
+      if (proto === 'grblhal' && e._type !== 'setting') return ['yes'];
+      return [null];
+    }
+    /* Can the connected controller run this entry? true/false/null. */
+    function runsHere(e) {
+      if (!MACHINE.protocol || e._type === 'setting') return null;
+      var st = supportFor(e, MACHINE.protocol)[0];
+      if (st === 'no') return false;
+      if (st === null) return null;
+      return true;
+    }
+    var SUPPORT_LOOK = {
+      yes:  { sym: '\u2713', word: 'runs as documented' },
+      part: { sym: '\u25D0', word: 'with limits' },
+      ncs:  { sym: '\u21BB', word: 'handled by ncSender' },
+      plug: { sym: '\u21BB', word: 'handled by the plugin' },
+      no:   { sym: '\u2717', word: 'not supported' }
+    };
+    function supportColor(st) {
+      if (st === 'yes') return IS_LIGHT ? '#047857' : '#10b981';
+      if (st === 'no') return IS_LIGHT ? '#c62839' : '#ff6b81';
+      if (st === 'part') return IS_LIGHT ? '#9a6700' : '#e3b341';
+      return IS_LIGHT ? '#0277bd' : '#48dbfb';
+    }
+    /* "Controllers" row for a G/M/$ card: one pill per family plus the
+       notes that aren't plain yes. The connected controller is outlined
+       and its note listed first. */
+    function renderSupport(e) {
+      if (!e.support) return '';
+      var pills = '', notes = [];
+      var order = CTRL_ORDER.slice();
+      if (MACHINE.protocol) {
+        order.splice(order.indexOf(MACHINE.protocol), 1);
+        order.unshift(MACHINE.protocol);
+      }
+      CTRL_ORDER.forEach(function (proto) {
+        var sp = supportFor(e, proto), st = sp[0];
+        if (!st) return;
+        var look = SUPPORT_LOOK[st], col = supportColor(st);
+        var here = proto === MACHINE.protocol;
+        pills += '<span class="gref-badge" title="' + esc(CTRL_LABEL[proto] + ': ' + look.word + (here ? ' (connected)' : '')) +
+                 '" style="text-transform:none;letter-spacing:0;font-size:0.72rem;color:' + col + ';border:1px solid ' + col +
+                 (here ? ';box-shadow:0 0 0 1px ' + col + ';font-weight:700' : '55') + '">' +
+                 look.sym + ' ' + esc(CTRL_LABEL[proto]) + (here ? ' &middot; connected' : '') + '</span>';
+      });
+      var seen = {};
+      order.forEach(function (proto) {
+        var sp = supportFor(e, proto);
+        if (sp[1]) { notes.push('<b>' + esc(CTRL_LABEL[proto]) + ':</b> ' + esc(sp[1])); seen[sp[1]] = true; }
+      });
+      // the same note on every controller (plugin commands): say it once
+      var distinct = Object.keys(seen);
+      if (notes.length === CTRL_ORDER.length && distinct.length === 1) notes = [esc(distinct[0])];
+      var html = '<div class="gref-label">Controllers</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">' + pills + '</div>';
+      if (notes.length) {
+        html += '<div style="font-size:0.8rem;color:var(--color-text-secondary,#9aa4b2);margin:4px 0 0">' + notes.join('<br>') + '</div>';
+      }
+      return html;
+    }
+    /* Grbl 1.1 / FluidNC notes for a numbered setting: the connected
+       controller's note stands out, the others are listed quietly. */
+    function renderSettingNotes(e) {
+      if (!e.ctrl) return '';
+      var order = MACHINE.protocol === 'fluidnc' ? ['fluidnc', 'grbl'] : ['grbl', 'fluidnc'];
+      var html = '', quiet = [];
+      order.forEach(function (proto) {
+        if (!e.ctrl[proto]) return;
+        if (proto === MACHINE.protocol) {
+          html += '<div class="gref-tip" style="border-left-color:' + supportColor('part') + ';color:var(--color-text-primary,#e8eaed)">' +
+                  '<b>' + esc(CTRL_LABEL[proto]) + ' (connected):</b> ' + esc(e.ctrl[proto]) + '</div>';
+        } else {
+          quiet.push('<b>' + esc(CTRL_LABEL[proto]) + ':</b> ' + esc(e.ctrl[proto]));
+        }
+      });
+      if (quiet.length) {
+        html += '<div class="gref-label">Other controllers</div>' +
+                '<div style="font-size:0.8rem;color:var(--color-text-secondary,#9aa4b2);margin:4px 0 0">' + quiet.join('<br>') + '</div>';
+      }
+      return html;
+    }
+    /* Why a numbered setting is missing, in terms of the connected family. */
+    function absentReason() {
+      if (MACHINE.protocol === 'grbl')
+        return 'Classic Grbl 1.1 only has $0&ndash;$6, $10&ndash;$13, $20&ndash;$27, $30&ndash;$32 and $100&ndash;$132; everything else here is grblHAL&#8209;only.';
+      if (MACHINE.protocol === 'fluidnc')
+        return 'FluidNC only mirrors a few numbered settings ($10, $13, $20&ndash;$23, $30, $32, $100&ndash;$132); the rest of its setup lives in config.yaml &mdash; <code>$CD</code> shows it.';
+      return 'This setting isn&rsquo;t in your controller&rsquo;s settings list &mdash; the firmware build doesn&rsquo;t have the feature compiled in, or its plugin is disabled.';
+    }
 
     /* ---------------- search ---------------- */
     function normalizeCode(letter, num) {
@@ -361,7 +478,11 @@
         else if ((e.desc || '').toLowerCase().indexOf(q) !== -1) score = 10;
         if (score > 0) results.push({ e: e, score: score });
       });
-      results.sort(function (a, b) { return b.score - a.score; });
+      // equal scores: codes the connected controller can't run go last
+      // (numbered settings keep their order - absent ones are dimmed)
+      function sink(r) { return r.e._type !== 'setting' && runsHere(r.e) === false ? 1 : 0; }
+      results.forEach(function (r, i) { r.i = i; });
+      results.sort(function (a, b) { return (b.score - a.score) || (sink(a) - sink(b)) || (a.i - b.i); });
       return results.map(function (r) { return r.e; });
     }
 
@@ -370,9 +491,28 @@
       var words = [];
       var work = line;
 
-      // pull out comments first - they are annotations, not commands
+      // pull out comments first - they are annotations, not commands -
+      // except the ones that do something: (MSG, ...), (PRINT, ...),
+      // (DEBUG, ...) and ncSender's (MSG, NCSENDER_PAUSE: title | text)
       work = work.replace(/\(([^)]*)\)/g, function (mm, inner) {
-        words.push({ tok: '(' + inner + ')', desc: 'Comment - ignored by the controller', kind: 'comment' });
+        var ce = null, extra = '';
+        var pause = inner.match(/^\s*MSG\s*,?\s*:?\s*NCSENDER_PAUSE\b\s*:?\s*(.*)$/i);
+        if (pause) {
+          ce = CODEMAP['NCSENDER_PAUSE'];
+          var parts = pause[1].split('|');
+          extra = parts.length > 1
+            ? ' - title "' + parts[0].trim() + '", message "' + parts.slice(1).join('|').trim() + '"'
+            : (pause[1].trim() ? ' - "' + pause[1].trim() + '"' : '');
+        } else if (/^\s*MSG\s*[,:]/i.test(inner)) {
+          ce = CODEMAP['(MSG)'];
+        } else if (/^\s*(PRINT|DEBUG)\s*,/i.test(inner)) {
+          ce = CODEMAP['(PRINT)'];
+        }
+        if (ce) {
+          words.push({ tok: '(' + inner + ')', desc: ce.name + extra, sub: ce.desc, kind: 'command', entry: ce });
+        } else {
+          words.push({ tok: '(' + inner + ')', desc: 'Comment - ignored by the controller', kind: 'comment' });
+        }
         return ' ';
       });
       var semi = work.indexOf(';');
@@ -382,7 +522,7 @@
       }
 
       // whole-line $ system commands ($H, $J=..., $110=500, $$, $SLOT3, $ADB_RETRACT ...)
-      var sysMatch = work.trim().match(/^(\$\d+=?|\$[A-Za-z][A-Za-z0-9_]*=?|\$[#$+]*=?)(.*)$/);
+      var sysMatch = work.trim().match(/^(\$\d+=?|\$[A-Za-z][A-Za-z0-9_\/]*=?|\$[#$+]*=?)(.*)$/);
       if (sysMatch && work.trim().charAt(0) === '$') {
         var head = sysMatch[1].replace(/=$/, '');
         var rest = (sysMatch[2] || '').trim();
@@ -390,11 +530,11 @@
         var entry = CODEMAP[head.toUpperCase()] || CODEMAP[head.toUpperCase() + '='] || null;
         if (numSetting && !entry) entry = CODEMAP['$' + numSetting[1]];
         if (!entry && /^\$H[XYZABC]$/i.test(head)) entry = CODEMAP['$H'];
-        if (!entry && /^\$SLOT0*\d+$/i.test(head)) entry = CODEMAP['$SLOT1']; // Rapid Change ATC slots
+        if (!entry && /^\$SLOT0*\d+$/i.test(head)) entry = CODEMAP['$SLOT1']; // ATC plugin slots
         if (entry) {
-          words.push({ tok: head, desc: entry.name + ' - ' + entry.desc, kind: 'command' });
+          words.push({ tok: head, desc: entry.name + ' - ' + entry.desc, kind: 'command', entry: entry });
         } else {
-          words.push({ tok: head, desc: 'grblHAL system command/setting (not in local DB - run $ES on the controller for details)', kind: 'unknown' });
+          words.push({ tok: head, desc: 'System command or setting not in this reference - $ES (grblHAL) or $CMD (FluidNC) lists what your controller has', kind: 'unknown' });
         }
         if (head.toUpperCase() === '$J') {
           // explain the jog body as G-code
@@ -415,11 +555,15 @@
 
       // grblHAL macro / flow-control syntax is valid even though it isn't
       // letter+number words: o-words, #<vars>, [expressions], keywords
-      var FLOW_RE = /(^[oO]\d+)|(#<[^>]*>)|(#\d+)|(\[[^\]]*\])|\b(IF|THEN|ELSE|ELSEIF|ENDIF|WHILE|ENDWHILE|DO|REPEAT|ENDREPEAT|SUB|ENDSUB|CALL|RETURN|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|MOD)\b/g;
+      var FLOW_RE = /(^[oO]\d+)|(#<[^>]*>)|(#\d+)|(\[[^\]]*\])|\b(IF|THEN|ELSE|ELSEIF|ENDIF|WHILE|ENDWHILE|DO|REPEAT|ENDREPEAT|BREAK|CONTINUE|SUB|ENDSUB|CALL|RETURN|ALARM|ERROR|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|MOD)\b|(=\s*[+-]?(?:\d+\.?\d*|\.\d+))|(=)/g;
       var fm;
       while ((fm = FLOW_RE.exec(work)) !== null) {
         markSpan(fm.index, fm[0].length);
-        words.push({ tok: fm[0], desc: 'grblHAL macro / expression syntax', kind: 'value' });
+        if (fm[7]) continue; // bare "=" of a parameter assignment
+        var pe = fm[2] ? CODEMAP[fm[2].toUpperCase()] : null; // e.g. a plugin's #<_name>
+        if (pe) words.push({ tok: fm[0], desc: pe.name, sub: pe.desc, kind: 'command', entry: pe });
+        else if (fm[6]) words.push({ tok: fm[6].replace(/^=\s*/, ''), desc: 'Value assigned to the parameter', kind: 'value' });
+        else words.push({ tok: fm[0], desc: 'Macro / expression syntax (grblHAL, FluidNC)', kind: 'value' });
       }
 
       var re = /([A-Za-z])\s*([+-]?(?:\d+\.?\d*|\.\d+))/g;
@@ -464,7 +608,7 @@
         if (t.entry) {
           words.push({ tok: t.letter + t.value,
                        desc: t.entry.name + (t.entry.modal ? ' [' + t.entry.modal + ']' : ''),
-                       sub: t.entry.desc, kind: 'command' });
+                       sub: t.entry.desc, kind: 'command', entry: t.entry });
           return;
         }
         if (t.letter === 'N') {
@@ -543,6 +687,10 @@
       if (mnum && MACHINE.state === 'ready') {
         onMachine = !!MACHINE.has[mnum[1]];
         liveVal = MACHINE.values[mnum[1]];
+      } else if (!mnum) {
+        // G/M/$ commands: from the support table and the connected family
+        onMachine = runsHere(e);
+        if (onMachine === true) onMachine = null; // only flag the misses
       }
       var html = '<div class="gref-card' + open + '" data-code="' + esc(e.code) + '">';
       html += '<div class="gref-card-head" onclick="grefToggle(this)"' + (onMachine === false ? ' style="opacity:0.55"' : '') + '>';
@@ -562,7 +710,13 @@
         html += '<div class="gref-label">Current value on this controller</div><div class="gref-pre">' + esc(e.code) + '=' + esc(liveVal) + '</div>';
       }
       if (onMachine === false) {
-        html += '<div class="gref-tip" style="border-left-color:' + absentColor + '">Your controller&rsquo;s $ES enumeration does not include this setting &mdash; this firmware build does not have the feature compiled in, or its plugin is disabled.</div>';
+        if (mnum) {
+          html += '<div class="gref-tip" style="border-left-color:' + absentColor + '">' + absentReason() + '</div>';
+        } else {
+          var why = supportFor(e, MACHINE.protocol)[1];
+          html += '<div class="gref-tip" style="border-left-color:' + absentColor + '">' +
+                  esc(CTRL_LABEL[MACHINE.protocol] + ' can\u2019t run this' + (why ? ': ' + why : '.')) + '</div>';
+        }
       }
       html += '<p>' + esc(e.desc) + '</p>';
       if (e.modal) html += '<p class="sub" style="color:var(--color-text-secondary,#9aa4b2);font-size:0.78rem">Modal group: ' + esc(e.modal) + '</p>';
@@ -575,6 +729,8 @@
       }
       if (e.example) { html += '<div class="gref-label">Example</div><div class="gref-pre">' + esc(e.example) + '</div>'; }
       if (e.tips) { html += '<div class="gref-tip">' + esc(e.tips) + '</div>'; }
+      if (e._type === 'setting') html += renderSettingNotes(e);
+      else html += renderSupport(e);
       html += '</div></div>';
       return html;
     }
@@ -589,8 +745,14 @@
                'Try a code (G38.2, $110, M6) or a keyword (dwell, probe, laser, tool change).</div>';
       } else {
         var status = '';
+        var ctrlName = MACHINE.protocol ? CTRL_LABEL[MACHINE.protocol] : '';
+        // FluidNC's version string already names it
+        if (ctrlName && MACHINE.fw.toLowerCase().indexOf(ctrlName.toLowerCase()) !== -1) ctrlName = '';
         if (MACHINE.state === 'ready') {
-          status = ' &middot; checked against your controller' + (MACHINE.fw ? ' (' + esc(MACHINE.fw) + ')' : '');
+          status = ' &middot; checked against your controller' +
+                   (ctrlName || MACHINE.fw ? ' (' + esc([ctrlName, MACHINE.fw].filter(Boolean).join(' \u00b7 ')) + ')' : '');
+        } else if (MACHINE.protocol) {
+          status = ' &middot; checked against your controller (' + esc(ctrlName) + ') &mdash; its settings list isn&rsquo;t available';
         } else if (MACHINE.state === 'unavailable') {
           status = ' &middot; controller settings unavailable &mdash; cannot flag which exist on your machine';
         }
@@ -1011,10 +1173,11 @@
       lines.forEach(function (line, li) {
         if (!line.trim()) return;
         var wordsArr = explainLine(line);
-        var invalidCount = 0, commandCount = 0;
+        var invalidCount = 0, commandCount = 0, blocked = [];
         wordsArr.forEach(function (w) {
           if (w.kind === 'invalid') invalidCount++;
           if (w.kind === 'command') commandCount++;
+          if (w.entry && runsHere(w.entry) === false) blocked.push(w);
         });
         var fileIdx = startLine === null || startLine === undefined ? null : startLine + li;
         var numHtml = fileIdx === null ? '' :
@@ -1039,6 +1202,15 @@
                    : 'Parts of this line are not valid G-code') +
                  ' &mdash; unrecognized text is marked in red below.</div>';
         }
+        if (blocked.length > 0) {
+          var badColor = supportColor('no');
+          var firstWhy = supportFor(blocked[0].entry, MACHINE.protocol)[1];
+          out += '<div style="padding:5px 10px;font-size:0.76rem;color:' + badColor + ';border-left:3px solid ' + badColor +
+                 ';margin:4px 0;background:rgba(255,107,129,0.08)">&#10007; ' +
+                 esc(CTRL_LABEL[MACHINE.protocol] + ' can\u2019t run ' +
+                     blocked.map(function (w) { return w.entry.code; }).join(', ') +
+                     (firstWhy ? ' \u2014 ' + firstWhy : '')) + '</div>';
+        }
         out += '<div class="gref-exline-words">';
         wordsArr.forEach(function (w) {
           out += '<div class="gref-word ' + esc(w.kind) + '">';
@@ -1048,6 +1220,14 @@
           out += '<span class="gref-word-tok"' + tokStyle + '>' + esc(w.tok) + '</span>';
           out += '<span class="gref-word-desc">' + esc(w.desc);
           if (w.sub) out += '<br><span class="sub">' + esc(w.sub) + '</span>';
+          // how the connected controller treats this word, when it isn't plain yes
+          if (w.entry && MACHINE.protocol) {
+            var sp = supportFor(w.entry, MACHINE.protocol);
+            if (sp[0] && sp[0] !== 'yes' && sp[0] !== 'plug' && sp[0] !== 'no') { // 'no' gets the line banner
+              out += '<br><span class="sub" style="color:' + supportColor(sp[0]) + '">' +
+                     SUPPORT_LOOK[sp[0]].sym + ' ' + esc(CTRL_LABEL[MACHINE.protocol] + ': ' + (sp[1] || SUPPORT_LOOK[sp[0]].word)) + '</span>';
+            }
+          }
           out += '</span></div>';
         });
         out += '</div></div>';
