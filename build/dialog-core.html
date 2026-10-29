@@ -5,12 +5,8 @@
   .gref { font-family: system-ui, -apple-system, sans-serif;
           color: var(--color-text-primary, #e8eaed);
           display: flex; flex-direction: column;
-          /* dynamic with the window, capped so the category chips settle
-             into two rows maximum (top row wider than bottom). 960px is a
-             fallback - at boot the script measures the first 8 rendered
-             chips and pins max-width to exactly that row, so the cap
-             tracks the host app's real button sizing. Narrower windows
-             wrap chips onto more rows responsively. */
+          /* dynamic with the window; each tab sets its own cap (see
+             applyTabWidth) - 960px is only the fallback */
           width: 92vw; max-width: 960px;
           height: 75vh; min-height: 420px;
           overflow-x: hidden; }
@@ -24,11 +20,46 @@
                  background: var(--color-surface-muted, #232a33); color: var(--color-text-primary, #e8eaed);
                  border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px); }
   .gref-search:focus { outline: none; border-color: var(--color-accent, #10b981); }
-  .gref-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .gref-chip { padding: 3px 10px; font-size: 0.75rem; border-radius: 999px;
-               border: 1px solid var(--color-border, #333a45); background: transparent;
-               color: var(--color-text-secondary, #9aa4b2); cursor: pointer; }
-  .gref-chip.active { background: var(--color-accent, #10b981); border-color: var(--color-accent, #10b981); color: #fff; }
+  .gref-search-wrap { position: relative; }
+  .gref-search-wrap .gref-search { padding-right: 38px; }
+  /* !important: ncSender's dialog gives every button inside it a teal
+     background, white text and its own padding, which would hide the icon */
+  .gref-search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+                       width: 26px !important; height: 26px !important; padding: 0 !important;
+                       min-width: 0 !important; display: inline-flex; line-height: 0;
+                       align-items: center; justify-content: center; cursor: pointer;
+                       background: transparent !important; border: 0 !important; border-radius: 50% !important;
+                       box-shadow: none !important; opacity: 1 !important;
+                       color: var(--color-text-secondary, #9aa4b2) !important; }
+  .gref-search-clear:hover { color: var(--color-text-primary, #e8eaed) !important;
+                             background: var(--color-surface, #1a2027) !important; }
+  .gref-search-clear svg, .gref-mnav svg { display: block; flex: 0 0 auto; }
+
+  /* --- reference: category column (ncSender Settings-style) + results --- */
+  .gref-body.gref-refmode { display: flex; flex-direction: row; padding: 0; overflow: hidden; min-height: 0; }
+  .gref-catnav { flex: 0 0 196px; display: flex; flex-direction: column; gap: 3px;
+                 padding: 12px 10px; overflow-y: auto; min-height: 0;
+                 border-right: 1px solid var(--color-border, #333a45);
+                 background: var(--color-surface, #1a2027); }
+  /* !important / inline styles: ncSender's dialog styles every button */
+  .gref-cat { display: flex !important; align-items: center; gap: 10px; width: 100% !important;
+              text-align: left; padding: 8px 10px !important; border-radius: 8px !important;
+              font-size: 0.86rem !important; line-height: 1.2; cursor: pointer;
+              box-shadow: none !important; opacity: 1 !important; transition: background 0.12s ease; }
+  .gref-cat:not([data-active]):hover { background: var(--color-surface-muted, #232a33) !important;
+                                       color: var(--color-text-primary, #e8eaed) !important; }
+  .gref-cat-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+  .gref-cat-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gref-cat-n { flex: 0 0 auto; font-size: 0.72rem; font-variant-numeric: tabular-nums;
+                color: var(--color-text-secondary, #9aa4b2); }
+  .gref-cat[data-empty] { opacity: 0.45 !important; }
+  .gref-reflist { flex: 1; min-width: 0; overflow-y: auto; padding: 16px; }
+  @media (max-width: 760px) {
+    .gref-body.gref-refmode { flex-direction: column; }
+    .gref-catnav { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; max-height: 40%;
+                   border-right: 0; border-bottom: 1px solid var(--color-border, #333a45); }
+    .gref-cat { width: auto !important; }
+  }
 
   /* --- results --- */
   .gref-body { flex: 1; overflow-y: auto; padding: 16px; }
@@ -74,6 +105,19 @@
                background: var(--color-surface-muted, #232a33);
                padding: 14px 16px; margin: 0 16px 12px; }
   .gcfg-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; }
+  .gcfg-keycap { width: 230px !important; text-align: center; cursor: default;
+                 font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9rem; font-weight: 600;
+                 padding: 7px 10px !important; color: var(--color-text-primary, #e8eaed) !important;
+                 background: var(--color-surface, #1a2027) !important;
+                 border: 1px solid var(--color-border, #333a45) !important; border-radius: var(--radius-small, 6px) !important; }
+  .gcfg-keycap.capturing { border-color: var(--color-accent, #10b981) !important; color: var(--color-accent, #10b981) !important; }
+  /* !important: ncSender's dialog styles every button */
+  .gcfg-btn { padding: 6px 14px !important; font-size: 0.82rem !important; cursor: pointer; box-shadow: none !important;
+              background: var(--color-surface-muted, #232a33) !important; color: var(--color-text-primary, #e8eaed) !important;
+              border: 1px solid var(--color-border, #333a45) !important; border-radius: var(--radius-small, 6px) !important; opacity: 1 !important; }
+  .gcfg-btn:hover:not(:disabled) { border-color: var(--color-accent, #10b981) !important; color: var(--color-accent, #10b981) !important; }
+  .gcfg-btn:disabled { opacity: 0.4 !important; cursor: default; }
+  .gcfg-btn.primary { background: var(--color-accent, #10b981) !important; border-color: var(--color-accent, #10b981) !important; color: #fff !important; }
   .gcfg-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: 0.9rem; }
   .gcfg-hint { color: var(--color-text-secondary, #9aa4b2); font-size: 0.78rem; margin: 2px 0 0 26px; }
   .gcfg input[type="number"] { width: 90px !important; padding: 6px 8px; }
@@ -93,6 +137,14 @@
               border-radius: var(--radius-small, 6px); }
   .gref-exline { border: 1px solid var(--color-border, #333a45); border-radius: var(--radius-small, 6px);
                  background: var(--color-surface-muted, #232a33); margin-bottom: 8px; }
+  .gref-exline-modes { display: flex; flex-wrap: wrap; gap: 5px; padding: 5px 12px 6px;
+                       border-bottom: 1px dashed var(--color-border, #333a45); }
+  .gref-mode { font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+               border: 1px solid var(--color-border, #333a45); color: var(--color-text-secondary, #9aa4b2);
+               background: var(--color-surface, #1a2027); cursor: help; }
+  .gref-mode.set { color: var(--color-text-primary, #e8eaed); }
+  .gref-mode.unset { border-style: dashed; opacity: 0.75; }
+  .gref-mode.warn { border-color: #e3b34188; color: #e3b341; }
   .gref-exline-src { padding: 8px 12px; border-bottom: 1px solid var(--color-border, #333a45);
                      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem;
                      color: var(--color-accent, #10b981);
@@ -105,6 +157,16 @@
   .gref-word-desc { flex: 1; color: var(--color-text-primary, #e8eaed); }
   .gref-word-desc .sub { color: var(--color-text-secondary, #9aa4b2); }
   .gref-word.unknown .gref-word-tok { color: var(--color-text-secondary, #9aa4b2); }
+  .gref-mnav { display: inline-flex; align-items: center; justify-content: center; line-height: 0;
+               width: 32px !important; height: 28px !important; padding: 0 !important; min-width: 0 !important;
+               cursor: pointer; box-shadow: none !important; opacity: 1 !important;
+               background: var(--color-surface-muted, #232a33) !important;
+               color: var(--color-text-primary, #e8eaed) !important;
+               border: 1px solid var(--color-border, #333a45) !important;
+               border-radius: var(--radius-small, 6px) !important; }
+  .gref-mnav:hover:not(:disabled) { border-color: var(--color-accent, #10b981) !important;
+                                    color: var(--color-accent, #10b981) !important; }
+  .gref-mnav:disabled { opacity: 0.35 !important; cursor: default; }
   .gref-foot { padding: 8px 16px; border-top: 1px solid var(--color-border, #333a45);
                font-size: 0.72rem; color: var(--color-text-secondary, #9aa4b2); }
   .gref-foot code { background: var(--color-surface-muted, #232a33); padding: 1px 5px;
@@ -136,10 +198,14 @@
   </div>
   <div class="gref-head">
     <div id="gref-panel-search">
-      <input class="gref-search" id="gref-search" type="text"
-             placeholder="Search: G38.2, $110, dwell, tool change, laser..."
-             autocomplete="off" spellcheck="false">
-      <div class="gref-chips" id="gref-chips" style="margin-top:8px"></div>
+      <div class="gref-search-wrap">
+        <input class="gref-search" id="gref-search" type="text"
+               placeholder="Search: G38.2, $110, dwell, tool change, laser..."
+               autocomplete="off" spellcheck="false">
+        <button class="gref-search-clear" id="gref-search-clear" type="button" title="Clear search" aria-label="Clear search" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -159,6 +225,20 @@
           On ncSender 2.0.191 and later, other commands keep flowing while the dialog is open;
           on older versions it pauses command streaming until closed, so avoid lookups mid-job there.</div>
         <div class="gcfg-status" id="gcfg-status"></div>
+      </div>
+
+      <div class="gcfg-card">
+        <div class="gcfg-title">Keyboard shortcut</div>
+        <div class="gcfg-row" style="flex-wrap:wrap">
+          <input type="text" id="gcfg-shortcut" class="gcfg-keycap" readonly value="Not set"
+                 aria-label="Shortcut that opens G-code Explorer">
+          <button type="button" class="gcfg-btn" id="gcfg-shortcut-set">Change&hellip;</button>
+          <button type="button" class="gcfg-btn" id="gcfg-shortcut-clear">Clear</button>
+        </div>
+        <div class="gcfg-hint" style="margin-left:0">Opens G-code Explorer from anywhere in ncSender. This is the same
+          setting as ncSender&rsquo;s Settings &rarr; Controls &rarr; Plugins, so a change in either place shows in both.
+          Needs an ncSender with plugin shortcuts (2.0.210 or later).</div>
+        <div class="gcfg-status" id="gcfg-shortcut-status" style="margin-left:0"></div>
       </div>
 
       <div class="gcfg-card">
@@ -190,7 +270,13 @@
 
   <div class="gref-manual" id="gref-manual" style="display:none;flex:1;flex-direction:column;min-height:0">
     <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:0.78rem;color:var(--color-text-secondary,#9aa4b2)">
-      <span>Browsing the official ncSender manual</span>
+      <button class="gref-mnav" id="gref-man-back" onclick="grefManualNav(-1)" title="Back" aria-label="Back" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <button class="gref-mnav" id="gref-man-fwd" onclick="grefManualNav(1)" title="Forward" aria-label="Forward" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button class="gref-mnav" id="gref-man-home" onclick="grefManualNav(0)" title="Manual home page" aria-label="Manual home page">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></button>
+      <span style="margin-left:4px">Browsing the official ncSender manual</span>
       <span style="flex:1"></span>
       <a href="https://siganberg.github.io/ncSender.manual/" target="_blank" rel="noopener"
          style="color:var(--color-accent,#10b981);text-decoration:none">Open in new tab &#8599;</a>
@@ -212,6 +298,28 @@
 <script>
   (function () {
     var DATA = @@PAYLOAD@@;
+    var BUILD_ID = '__BUILD_ID__';
+
+    /* ---------------- one live instance ----------------
+       ncSender builds a plugin dialog from scratch every time it opens,
+       which used to throw away everything: the search, pasted code, the
+       Explorer map, the manual page. Instead the first instance keeps
+       living. Its root element is moved out of the dialog as it closes
+       and back into the next dialog in place of the fresh copy, so every
+       tab picks up where it was left. A different build (plugin updated)
+       starts over. */
+    var FRESH_ROOT = (function () {
+      var me = document.currentScript, el = me && me.previousElementSibling;
+      while (el && el.id !== 'gref-root') el = el.previousElementSibling;
+      return el || document.getElementById('gref-root');
+    })();
+    var LIVE = window.__gcodeExplorer;
+    if (LIVE && LIVE.build === BUILD_ID && LIVE.root && FRESH_ROOT && LIVE.root !== FRESH_ROOT && !LIVE.isShown()) {
+      try { LIVE.adopt(FRESH_ROOT, DATA); return; } catch (e) { /* start fresh below */ }
+    }
+    if (LIVE && LIVE.root !== FRESH_ROOT && !(LIVE.isShown && LIVE.isShown()) && LIVE.dispose) {
+      try { LIVE.dispose(); } catch (e) {}
+    }
 
     /* Per-category color keys with dark- and light-theme variants.
        The dialog renders in ncSender's main document, so we detect the
@@ -316,7 +424,8 @@
       else if (state.tab === 'explain') { try { updateExout(); } catch (e) {} }
     }
 
-    (function loadMachineSettings() {
+    var machineSig = '';
+    function loadMachineSettings() {
       if (typeof fetch === 'undefined') { MACHINE.state = 'unavailable'; return; }
       try {
         fetch(apiBase() + '/api/firmware')
@@ -324,6 +433,7 @@
           .then(function (data) {
             var settings = data && (data.settings || data.Settings);
             var named = false;
+            MACHINE.has = {}; MACHINE.values = {}; MACHINE.protocol = null;
             if (settings && Object.keys(settings).length > 0) {
               Object.keys(settings).forEach(function (k) {
                 if (!/^\d+$/.test(k)) return;
@@ -346,14 +456,23 @@
             if (p && CTRL_LABEL[p]) MACHINE.protocol = p;
             else if (/fluidnc/i.test(MACHINE.fw)) MACHINE.protocol = 'fluidnc';
             else if (named) MACHINE.protocol = 'grblhal';
-            rerenderMachineViews();
+            machineChanged();
           })
           .catch(function () {
             MACHINE.state = 'unavailable';
-            rerenderMachineViews();
+            machineChanged();
           });
       } catch (e) { MACHINE.state = 'unavailable'; }
-    })();
+    }
+    // only redraw when something differs, so a reopened dialog keeps its
+    // scroll position and open cards
+    function machineChanged() {
+      var sig = JSON.stringify([MACHINE.state, MACHINE.protocol, MACHINE.fw, MACHINE.values, Object.keys(MACHINE.has).length]);
+      if (sig === machineSig) return;
+      machineSig = sig;
+      rerenderMachineViews();
+    }
+    loadMachineSettings();
 
     /* Support of an entry on one controller family: [status, note].
        status: yes | part | ncs | plug | no | null (unknown). grblHAL is
@@ -735,14 +854,34 @@
       return html;
     }
 
-    function renderReference() {
+    // Reference = category column on the left, results on the right.
+    function ensureRefFrame() {
       var body = document.getElementById('gref-body');
-      var results = search(state.query, state.category);
+      var list = document.getElementById('gref-reflist');
+      if (!list || !body.contains(list)) {
+        body.innerHTML = '<nav class="gref-catnav" id="gref-catnav" aria-label="Categories"></nav>' +
+                         '<div class="gref-reflist" id="gref-reflist"></div>';
+        list = document.getElementById('gref-reflist');
+      }
+      return list;
+    }
+
+    function renderReference() {
+      var list = ensureRefFrame();
+      // matches per category for the current search, shown in the column
+      var all = search(state.query, 'all');
+      var counts = { all: all.length };
+      all.forEach(function (e) { counts[e.category] = (counts[e.category] || 0) + 1; });
+      renderChips(counts);
+      var results = state.category === 'all' ? all : all.filter(function (e) { return e.category === state.category; });
       var shown = results;
       var html = '';
       if (results.length === 0) {
-        html = '<div class="gref-empty">No matches for &ldquo;' + esc(state.query) + '&rdquo;.<br>' +
-               'Try a code (G38.2, $110, M6) or a keyword (dwell, probe, laser, tool change).</div>';
+        html = '<div class="gref-empty">No matches for &ldquo;' + esc(state.query) + '&rdquo;' +
+               (state.category !== 'all' ? ' in ' + esc(badgeFor({ category: state.category })) : '') + '.<br>' +
+               (state.category !== 'all' && counts.all > 0
+                 ? counts.all + ' in other categories &mdash; <a href="#" onclick="grefSetCategory(&quot;all&quot;);return false" style="color:var(--color-accent,#10b981)">show all</a>.'
+                 : 'Try a code (G38.2, $110, M6) or a keyword (dwell, probe, laser, tool change).') + '</div>';
       } else {
         var status = '';
         var ctrlName = MACHINE.protocol ? CTRL_LABEL[MACHINE.protocol] : '';
@@ -763,7 +902,7 @@
         if (state.query && shown.length > 0) state.open[shown[0].code] = true;
         shown.forEach(function (e) { html += renderCard(e); });
       }
-      body.innerHTML = html;
+      list.innerHTML = html;
     }
 
     var CHUNK_ROWS = 4000; // rows rendered per batch; scrolling/jumping loads more
@@ -851,6 +990,25 @@
         if (m && m[0].length === tok.length) return GCODE_WORD_RULES[r][2];
       }
       return null;
+    }
+
+    // On reopen: if ncSender has a different file loaded now, show that
+    // one; the same file keeps its selection and scroll.
+    function refreshGcodeFile() {
+      if (state.gfile.status !== 'ready' || typeof fetch === 'undefined') return;
+      fetch(apiBase() + '/api/gcode-files/current/download')
+        .then(function (r) { return r && r.ok ? r.text() : null; })
+        .then(function (text) {
+          var lines = text === null || text === undefined ? [] : text.split(/\r?\n/);
+          if (lines.length === state.gfile.lines.length && lines.join('\n') === state.gfile.lines.join('\n')) return;
+          state.gfile = { status: 'idle', name: '', lines: [] };
+          if (state.src === 'file') {
+            state.gsel = { anchor: -1, from: -1, to: -1 };
+            state.fsearch = { q: '', matches: [], cur: -1 };
+            if (state.tab === 'explain') renderExplain();
+          }
+        })
+        .catch(function () {});
     }
 
     function loadGcodeFile() {
@@ -1165,14 +1323,179 @@
       }
     }
 
+    /* ---------------- modal context ----------------
+       What a number on a line means depends on modes set on EARLIER lines
+       of the file: G20/G21 units, G90/G91 absolute/relative, the work
+       offset G54-G59.3 (or G53 machine coordinates on the line itself),
+       G93/G94/G95 feed mode. These are read from the file up to the line
+       being explained, not from the machine, so the explanation is what
+       the line will do when the program reaches it. */
+    var MODAL_CP = 1000; // checkpoint every N lines, so long files stay quick
+    var modalMemo = { lines: null, cps: [] };
+    function modalNew() {
+      return { units: 'G21', unitsAt: 0, dist: 'G90', distAt: 0, wcs: 'G54', wcsAt: 0,
+               feed: 'G94', feedAt: 0, plane: 'G17', planeAt: 0, arc: 'G91.1', arcAt: 0,
+               motion: null, motionAt: 0, f: null, fAt: 0, spindle: 'M5', spindleAt: 0, s: null, sAt: 0,
+               g92: false, g92At: 0, tlo: false, tloAt: 0 };
+    }
+    function modalCopy(st) { var o = {}; for (var k in st) o[k] = st[k]; return o; }
+    // Applies one line's modal words to st. at = 1-based line number (or
+    // -1 for "earlier in this text"). Returns what the line itself adds:
+    // g53 (machine coordinates for this line only) and which modes it set.
+    function modalStep(st, line, at) {
+      var clean = String(line).replace(/\([^)]*\)/g, ' ').replace(/;.*$/, '')
+                              .replace(/#<[^>]*>/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+      var info = { g53: false, sets: false, end: false, motionHere: false, fHere: false, axes: false, axisOwner: false, raw: clean };
+      if (/^\s*\$/.test(clean)) return info; // $J= jogs and $ commands leave the program's modes alone
+      info.axes = /[XYZABCUVW]\s*[+-]?(\d|\.\d)/i.test(clean);
+      var fm = clean.match(/F\s*([+-]?(?:\d+\.?\d*|\.\d+))/i);
+      if (fm) { st.f = parseFloat(fm[1]); st.fAt = at; info.fHere = true; }
+      var sm = clean.match(/S\s*([+-]?(?:\d+\.?\d*|\.\d+))/i);
+      if (sm) { st.s = parseFloat(sm[1]); st.sAt = at; }
+      var re = /([GM])\s*([+-]?\d+(?:\.\d+)?)/gi, m;
+      while ((m = re.exec(clean)) !== null) {
+        var n = parseFloat(m[2]), L = m[1].toUpperCase();
+        if (L === 'M') {
+          if (n === 2 || n === 30) info.end = true;
+          else if (n === 3 || n === 4 || n === 5) { st.spindle = 'M' + n; st.spindleAt = at; }
+          continue;
+        }
+        if (n === 0 || n === 1 || n === 2 || n === 3 || n === 80 || n === 73 || n === 76 ||
+            (n >= 81 && n <= 89 && n % 1 === 0) || (n > 38 && n < 39)) {
+          st.motion = 'G' + n; st.motionAt = at; info.motionHere = true; continue;
+        }
+        // axis words on these lines are their arguments, not a move
+        if (n === 4 || n === 10 || n === 28 || n === 30 || n === 92 || n === 43.1 || n === 28.1 || n === 30.1) info.axisOwner = true;
+        if (n === 92) { st.g92 = true; st.g92At = at; }
+        else if (n === 92.1 || n === 92.2) { st.g92 = false; st.g92At = at; }
+        else if (n === 92.3) { st.g92 = true; st.g92At = at; }
+        else if (n === 43.1) { st.tlo = true; st.tloAt = at; }
+        else if (n === 49) { st.tlo = false; st.tloAt = at; }
+        var code = 'G' + (n % 1 === 0 ? String(n) : String(n));
+        if (n === 20 || n === 21) { st.units = code; st.unitsAt = at; info.sets = true; }
+        else if (n === 90 || n === 91) { st.dist = code; st.distAt = at; info.sets = true; }
+        else if (n === 90.1 || n === 91.1) { st.arc = code; st.arcAt = at; info.sets = true; }
+        else if (n === 93 || n === 94 || n === 95) { st.feed = code; st.feedAt = at; info.sets = true; }
+        else if (n === 17 || n === 18 || n === 19) { st.plane = code; st.planeAt = at; info.sets = true; }
+        else if ((n >= 54 && n <= 59 && n % 1 === 0) || n === 59.1 || n === 59.2 || n === 59.3) { st.wcs = code; st.wcsAt = at; info.sets = true; }
+        else if (n === 53) info.g53 = true;
+      }
+      return info;
+    }
+    // Program end resets most modes (Grbl/grblHAL): applied after the line.
+    function modalEnd(st, at) {
+      st.dist = 'G90'; st.distAt = at; st.wcs = 'G54'; st.wcsAt = at;
+      st.plane = 'G17'; st.planeAt = at; st.feed = 'G94'; st.feedAt = at;
+    }
+    // Modes in effect at the START of line idx (0-based) of lines.
+    function modalAt(lines, idx) {
+      if (modalMemo.lines !== lines) { modalMemo.lines = lines; modalMemo.cps = [modalNew()]; }
+      var k = Math.floor(idx / MODAL_CP), i, st;
+      while (modalMemo.cps.length <= k) {
+        var j = modalMemo.cps.length - 1;
+        st = modalCopy(modalMemo.cps[j]);
+        for (i = j * MODAL_CP; i < (j + 1) * MODAL_CP && i < lines.length; i++) {
+          if (modalStep(st, lines[i], i + 1).end) modalEnd(st, i + 1);
+        }
+        modalMemo.cps.push(st);
+      }
+      st = modalCopy(modalMemo.cps[k]);
+      for (i = k * MODAL_CP; i < idx && i < lines.length; i++) {
+        if (modalStep(st, lines[i], i + 1).end) modalEnd(st, i + 1);
+      }
+      return st;
+    }
+
+    var UNIT_WORD = { G20: 'in', G21: 'mm' };
+    var DIST_WORD = { G90: 'absolute', G91: 'relative' };
+    var FEED_WORD = { G93: 'inverse time', G94: '/min', G95: '/rev' };
+    var PLANE_WORD = { G18: 'XZ plane', G19: 'YZ plane' };
+    function modeWhere(at, what, dflt) {
+      if (at > 0) return what + ' set on line ' + at + '.';
+      if (at < 0) return what + ' set earlier in this code.';
+      return 'Not set earlier in the file: ' + dflt;
+    }
+    // badges under the line
+    function modalBadges(st, info) {
+      var u = UNIT_WORD[st.units];
+      var h = '<div class="gref-exline-modes">';
+      function chip(cls, text, title) { h += '<span class="gref-mode ' + cls + '" title="' + esc(title) + '">' + esc(text) + '</span>'; }
+      chip(st.unitsAt ? 'set' : 'unset warn', (st.unitsAt ? '' : 'units? ') + u + ' \u00b7 ' + st.units,
+           modeWhere(st.unitsAt, (st.units === 'G20' ? 'Inches' : 'Millimetres') + ' (' + st.units + ')',
+                     'the controller\u2019s current units apply (G21 mm after a reset; G20 if ncSender is set to Imperial).'));
+      chip(st.distAt ? 'set' : 'unset', DIST_WORD[st.dist] + ' \u00b7 ' + st.dist,
+           modeWhere(st.distAt, (st.dist === 'G91' ? 'Relative' : 'Absolute') + ' distance mode (' + st.dist + ')', 'absolute (G90) is the default.'));
+      if (info.g53) chip('set warn', 'machine coords \u00b7 G53', 'G53 on this line: its coordinates are machine coordinates, ignoring work offsets (this line only).');
+      else chip(st.wcsAt ? 'set' : 'unset', st.wcs + ' work coords',
+                modeWhere(st.wcsAt, 'Work offset ' + st.wcs, 'G54 is the default.'));
+      chip(st.feedAt ? 'set' : 'unset', st.feed === 'G93' ? 'inverse time \u00b7 G93' : u + FEED_WORD[st.feed] + ' \u00b7 ' + st.feed,
+           modeWhere(st.feedAt, 'Feed mode ' + st.feed, 'units per minute (G94) is the default.'));
+      if (PLANE_WORD[st.plane]) chip('set', PLANE_WORD[st.plane] + ' \u00b7 ' + st.plane, modeWhere(st.planeAt, 'Arc plane ' + st.plane, ''));
+      // what this line inherits from earlier lines, when it moves
+      if (info.axes && !info.axisOwner) {
+        var mo = st.motion;
+        if (!info.motionHere) {
+          if (!mo || mo === 'G80') chip('warn', 'no motion mode', 'No G0/G1/G2/G3 earlier in the file: the controller rejects axis words without one.');
+          else chip('warn', mo + ' carried over', 'No motion word on this line: it repeats ' + mo + ' set on line ' + (st.motionAt > 0 ? st.motionAt : '?') + '.');
+        }
+        if (mo && /^G(7[36]|8[1-9])$/.test(mo)) chip('warn', mo + ' cycle: each XY repeats it', 'A canned cycle is active (line ' + st.motionAt + '): every X/Y position runs the cycle again until G80.');
+        var feedMove = mo === 'G1' || mo === 'G2' || mo === 'G3';
+        if (feedMove && !info.fHere) {
+          if (st.f === null) chip('warn', 'no feed yet', 'No F word earlier in the file: the controller uses its current feed rate, or refuses the move.');
+          else chip('set', 'F' + st.f + ' from line ' + st.fAt, 'Feed rate carried over from line ' + st.fAt + '.');
+        }
+        if (feedMove && st.spindle === 'M5') {
+          chip('warn', st.spindleAt ? 'spindle off (M5)' : 'spindle not started',
+               st.spindleAt ? 'M5 on line ' + st.spindleAt + ' stopped the spindle before this cut.' : 'No M3/M4 earlier in the file: this cut runs with the spindle off unless something else started it.');
+        }
+        if (st.g92) chip('warn', 'G92 offset active', 'A G92 offset set on line ' + st.g92At + ' shifts these coordinates until G92.1.');
+        if (st.tlo && /Z\s*[+-]?(\d|\.\d)/i.test(info.raw || '')) chip('set', 'TLO (G43.1, line ' + st.tloAt + ')', 'Z includes the tool length offset set on line ' + st.tloAt + '.');
+      }
+      return h + '</div>';
+    }
+    // unit and coordinate type for one word's description
+    function modalNote(w, st, info, lineCmds) {
+      if (w.kind !== 'value' || !/^[A-Za-z][+-]?(\d|\.\d)/.test(w.tok)) return '';
+      var L = w.tok.charAt(0).toUpperCase(), u = UNIT_WORD[st.units];
+      var setsOffsets = /\b(G10|G92|G43\.1)\b/.test(lineCmds); // values are offsets, not moves
+      if ('XYZUVW'.indexOf(L) >= 0 || 'ABC'.indexOf(L) >= 0) {
+        var unit = 'ABC'.indexOf(L) >= 0 ? '\u00b0' : ' ' + u;
+        if (setsOffsets) return unit;
+        if (info.g53) return unit + ', machine coordinates (G53)';
+        if (st.dist === 'G91') return unit + ', relative to where the tool is (G91)';
+        return unit + ', absolute in ' + st.wcs + ' work coordinates';
+      }
+      if ('IJK'.indexOf(L) >= 0) return ' ' + u + (st.arc === 'G90.1' ? ', absolute arc centre (G90.1)' : ', offset from the arc\u2019s start');
+      if (L === 'R') return ' ' + u;
+      if (L === 'F') {
+        if (st.feed === 'G93') return ' \u2014 inverse time: finish the move in 1/F minutes (G93)';
+        if (st.feed === 'G95') return ' ' + u + ' per spindle revolution (G95)';
+        return ' ' + u + '/min';
+      }
+      return '';
+    }
+
     function renderExplainOutput(text, startLine) {
       var out = '';
       var all = text.split(/\r?\n/);
       var MAX_EXPLAIN = 300;
       var lines = all.length > MAX_EXPLAIN ? all.slice(0, MAX_EXPLAIN) : all;
+      // modes in effect where the explanation starts, read from the file
+      var srcLines = activeSrc().lines;
+      var mst = (startLine === null || startLine === undefined) ? modalNew() : modalAt(srcLines, startLine);
       lines.forEach(function (line, li) {
+        var at = (startLine === null || startLine === undefined) ? -1 : startLine + li + 1;
+        var minfo = modalStep(mst, line, at);
+        var lineState = modalCopy(mst);
+        if (minfo.end) modalEnd(mst, at);
         if (!line.trim()) return;
         var wordsArr = explainLine(line);
+        var lineCmds = wordsArr.filter(function (w) { return w.kind === 'command'; }).map(function (w) { return w.tok.toUpperCase(); }).join(' ');
+        var hasNumbers = false;
+        wordsArr.forEach(function (w) {
+          var note = modalNote(w, lineState, minfo, lineCmds);
+          if (note) { w.desc += note; hasNumbers = true; }
+        });
         var invalidCount = 0, commandCount = 0, blocked = [];
         wordsArr.forEach(function (w) {
           if (w.kind === 'invalid') invalidCount++;
@@ -1192,6 +1515,8 @@
           ' data-line="' + fileIdx + '" onclick="grefExFocus(' + fileIdx + ', this)" style="cursor:pointer"' +
           ' title="Click to locate line ' + (fileIdx + 1) + ' in the file"';
         out += '<div class="gref-exline"' + attrs + '><div class="gref-exline-src">' + mapBtn + numHtml + hlGcode(line.trim()) + '</div>';
+        // the modes this line runs under, read from the lines before it
+        if (hasNumbers || minfo.sets) out += modalBadges(lineState, minfo);
         if (invalidCount > 0) {
           var warnColor = IS_LIGHT ? '#9a6700' : '#e3b341';
           out += '<div style="display:flex;gap:8px;align-items:center;padding:5px 10px;font-size:0.76rem;' +
@@ -1238,29 +1563,28 @@
       return out || '<div class="gref-empty">Nothing to explain yet.</div>';
     }
 
-    function renderChips() {
-      var el = document.getElementById('gref-chips');
-      // Inline styles throughout: the dialog lives in ncSender's main
-      // document, whose global button styling otherwise overrides our
-      // classes. Inline always wins.
+    // The category column, styled after ncSender's Settings sidebar: the
+    // selected item is filled (tinted with its category colour), the rest
+    // are plain rows. Colours are inline: the dialog lives in ncSender's
+    // main document, whose button styling would otherwise win.
+    function renderChips(counts) {
+      var el = document.getElementById('gref-catnav');
+      if (!el) return;
+      counts = counts || {};
       el.innerHTML = CATEGORIES.map(function (c) {
         var active = state.category === c.id;
         var col = IS_LIGHT ? c.light : c.dark;
-        // "All" matches the Reference/Explain buttons' accent highlight
-        var fill = c.accent ? 'var(--color-accent, ' + col + ')' : col;
-        var activeText = (c.accent || IS_LIGHT) ? '#fff' : '#10151c';
-        var style;
-        if (active) {
-          style = 'background:' + fill + ';border:1px solid ' + fill +
-                  ';color:' + activeText + ';font-weight:600;opacity:1;';
-        } else {
-          style = 'background:transparent;border:1px solid ' + col +
-                  ';color:' + col + ';font-weight:400;opacity:0.55;';
-        }
-        return '<button class="gref-chip" style="' + style + '" ' +
-               'onmouseover="this.style.opacity=1" ' +
-               'onmouseout="this.style.opacity=' + (active ? 1 : 0.55) + '" ' +
-               'onclick="grefSetCategory(&quot;' + c.id + '&quot;)">' + esc(c.label) + '</button>';
+        var n = counts[c.id] || 0;
+        var style = active
+          ? 'background:' + col + '26;border:1px solid ' + col + '70;color:var(--color-text-primary,#e8eaed);font-weight:600;'
+          : 'background:transparent;border:1px solid transparent;color:var(--color-text-secondary,#9aa4b2);font-weight:500;';
+        return '<button class="gref-cat" type="button" style="' + style + '"' +
+               (active ? ' data-active="1" aria-current="true"' : '') +
+               (n === 0 && !active ? ' data-empty="1"' : '') +
+               ' onclick="grefSetCategory(&quot;' + c.id + '&quot;)">' +
+               '<span class="gref-cat-dot" style="background:' + col + '"></span>' +
+               '<span class="gref-cat-label">' + esc(c.label) + '</span>' +
+               '<span class="gref-cat-n">' + n + '</span></button>';
       }).join('');
     }
 
@@ -1323,15 +1647,14 @@
       }
     }
 
-    var CHIP_CAP_PX = 0; // measured two-row chip width; 0 = CSS fallback
 
     function applyTabWidth() {
       // Per-tab width: Explain stretches to 1800px since G-code lines use
       // every pixel. NC Manual caps at 1260px - the manual is Material for
       // MkDocs, whose content grid maxes out at 61rem (~976px) and whose
       // sidebars+TOC layout completes at the 1220px breakpoint, so anything
-      // wider is centered dead margin. Reference/Settings keep the
-      // chip-fitted two-row cap.
+      // wider is centered dead margin. Reference gets 1400px for its
+      // category column plus long descriptions; Settings 1100px.
       try {
         var root = document.getElementById('gref-root');
         if (!root) return;
@@ -1339,8 +1662,11 @@
           root.style.maxWidth = '1800px';
         } else if (state.tab === 'manual') {
           root.style.maxWidth = '1260px';
+        } else if (state.tab === 'reference') {
+          // category column + room for long descriptions
+          root.style.maxWidth = '1400px';
         } else {
-          root.style.maxWidth = CHIP_CAP_PX ? CHIP_CAP_PX + 'px' : '';
+          root.style.maxWidth = '1100px';
         }
       } catch (e) {}
     }
@@ -1387,11 +1713,14 @@
       }
       body.style.display = '';
       if (state.tab === 'reference') {
-        // reference: the body itself scrolls the card list
-        body.style.overflowY = 'auto';
+        // reference: category column + results list, each scrolling on
+        // its own (see .gref-refmode)
+        body.classList.add('gref-refmode');
+        body.style.overflowY = '';
         body.style.overflowX = '';
-        renderChips(); renderReference();
+        renderReference();
       } else {
+        body.classList.remove('gref-refmode');
         // explain: the body is a fixed flex frame; the file list and the
         // explanation pane each scroll independently inside it, and
         // horizontal overflow is clipped so no content can ever push
@@ -1404,8 +1733,19 @@
     }
 
     /* ---------------- global handlers (dialog scope) ---------------- */
-    window.grefSwitchTab = function (tab) { state.tab = tab; render(); };
-    window.grefSetCategory = function (cat) { state.category = cat; render(); };
+    window.grefSwitchTab = function (tab) {
+      if (tab === state.tab) { render(); return; }
+      state.tab = tab;
+      render();
+      restoreScroll(tab);
+    };
+    window.grefSetCategory = function (cat) {
+      state.category = cat;
+      renderReference();
+      var list = document.getElementById('gref-reflist');
+      if (list) list.scrollTop = 0;
+      if (tabScroll.reference) delete tabScroll.reference['gref-reflist'];
+    };
     window.grefToggle = function (headEl) {
       var card = headEl.parentElement;
       var code = card.getAttribute('data-code');
@@ -1615,39 +1955,390 @@
       chk.addEventListener('change', save);
     })();
 
+    /* ---------------- keyboard shortcut ----------------
+       ncSender (2.0.210+) lets each plugin Tools-menu entry be bound to a
+       key in Settings -> Controls; the binding lives in ncSender's own
+       settings (keyboardBindings, keyed by action id), and saving it
+       there reaches every open ncSender window. This card reads and
+       writes that same entry, so the shortcut can be found from here. */
+    var shortcutCapturing = false;
+    if (DATA.showSettingsTab) (function initShortcut() {
+      var ACTION = 'Plugin:com.cncdocs.gcode-reference:open-explorer';
+      var BY_LABEL = 'Plugin:com.cncdocs.gcode-reference:G-code Explorer'; // older hosts key on the label
+      // ncSender's built-in keys, so a clash with them is caught too
+      var BUILT_IN = { JogYPlus: 'ArrowUp', JogYMinus: 'ArrowDown', JogXMinus: 'ArrowLeft', JogXPlus: 'ArrowRight',
+                       JogZPlus: 'PageUp', JogZMinus: 'PageDown', JobStart: 'Shift+~', JobPause: 'Shift+!',
+                       JobStop: 'Shift+@', CycleSteps: 'Shift+Z', 'SetStep0.1': 'Shift+X', SetStep1: 'Shift+C', SetStep10: 'Shift+V' };
+      var keyEl = document.getElementById('gcfg-shortcut');
+      var setBtn = document.getElementById('gcfg-shortcut-set');
+      var clearBtn = document.getElementById('gcfg-shortcut-clear');
+      var statusEl = document.getElementById('gcfg-shortcut-status');
+      if (!keyEl || !setBtn || typeof fetch === 'undefined') return;
+      var bindings = {};
+
+      function current() { return bindings[ACTION] || bindings[BY_LABEL] || null; }
+      function show() {
+        keyEl.classList.toggle('capturing', shortcutCapturing);
+        keyEl.value = shortcutCapturing ? 'Press a key combination\u2026' : (current() || 'Not set');
+        setBtn.textContent = shortcutCapturing ? 'Cancel' : 'Change\u2026';
+        clearBtn.disabled = shortcutCapturing || !current();
+      }
+      function status(html) { statusEl.innerHTML = html || ''; }
+      function nice(actionId) {
+        if (/^Plugin:/.test(actionId)) return actionId.split(':').slice(2).join(':') + ' (plugin)';
+        return actionId.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/Plus$/, '+').replace(/Minus$/, '\u2212');
+      }
+      function load() {
+        return fetch(apiBase() + '/api/settings')
+          .then(function (r) { return r && r.ok ? r.json() : {}; })
+          .then(function (s) {
+            bindings = {};
+            Object.keys(BUILT_IN).forEach(function (k) { bindings[k] = BUILT_IN[k]; });
+            var saved = (s && s.keyboardBindings) || {};
+            Object.keys(saved).forEach(function (k) { bindings[k] = saved[k]; });
+            show();
+          })
+          .catch(function () { show(); });
+      }
+      // ncSender's own key naming (modifiers Ctrl, Meta, Alt, Shift, then
+      // the key as the browser names it), so the saved combo matches what
+      // ncSender sees when the keys are pressed
+      var MOD = { control: 1, ctrl: 1, meta: 1, alt: 1, shift: 1, os: 1 };
+      var SPECIAL = { ' ': 'Space', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight',
+                      pageup: 'PageUp', pagedown: 'PageDown', escape: 'Escape', enter: 'Enter', tab: 'Tab',
+                      backspace: 'Backspace', 'delete': 'Delete', home: 'Home', end: 'End' };
+      function comboOf(e) {
+        var parts = [];
+        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.metaKey) parts.push('Meta');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        var k = e.key || '', lower = k.toLowerCase();
+        if (!k || MOD[lower]) return { partial: parts.join('+') };
+        k = SPECIAL[lower] || (lower.length === 1 ? k.toUpperCase() : k.replace(/^[a-z]/, function (c) { return c.toUpperCase(); }));
+        parts.push(k);
+        return { combo: parts.join('+') };
+      }
+      function save(changes, done) {
+        fetch(apiBase() + '/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyboardBindings: changes })
+        }).then(function (r) {
+          if (!r || !r.ok) throw new Error('save failed');
+          Object.keys(changes).forEach(function (k) { bindings[k] = changes[k]; });
+          show();
+          status(done);
+        }).catch(function () { status('Couldn\u2019t save the shortcut.'); });
+      }
+      function assign(combo) {
+        var changes = {};
+        changes[ACTION] = combo;
+        if (bindings[BY_LABEL]) changes[BY_LABEL] = null;
+        Object.keys(bindings).forEach(function (k) {
+          if (k !== ACTION && k !== BY_LABEL && bindings[k] === combo) changes[k] = null; // the key moves here
+        });
+        save(changes, 'Saved: press <b>' + esc(combo) + '</b> anywhere in ncSender to open G-code Explorer.');
+      }
+      function finish(combo) {
+        shortcutCapturing = false;
+        show();
+        var owner = null;
+        Object.keys(bindings).forEach(function (k) {
+          if (k !== ACTION && k !== BY_LABEL && bindings[k] === combo) owner = k;
+        });
+        if (combo === current()) { status(''); return; }
+        if (!owner) { assign(combo); return; }
+        status('<b>' + esc(combo) + '</b> is already used by <b>' + esc(nice(owner)) + '</b>. ' +
+               '<button type="button" class="gcfg-btn primary" id="gcfg-shortcut-take">Use it for G-code Explorer</button> ' +
+               '<button type="button" class="gcfg-btn" id="gcfg-shortcut-keep">Keep it there</button>');
+        document.getElementById('gcfg-shortcut-take').onclick = function () { assign(combo); };
+        document.getElementById('gcfg-shortcut-keep').onclick = function () { status(''); };
+      }
+      setBtn.addEventListener('click', function () {
+        shortcutCapturing = !shortcutCapturing;
+        status(shortcutCapturing ? 'Press the keys you want, or Esc to cancel.' : '');
+        show();
+        if (shortcutCapturing) keyEl.focus();
+      });
+      clearBtn.addEventListener('click', function () {
+        var changes = {};
+        changes[ACTION] = null;
+        if (bindings[BY_LABEL]) changes[BY_LABEL] = null;
+        save(changes, 'Shortcut removed.');
+      });
+      // keys go to this field while capturing; ncSender ignores keys typed
+      // into fields, so nothing else reacts to them
+      keyEl.addEventListener('keydown', function (e) {
+        if (!shortcutCapturing) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+          shortcutCapturing = false; status(''); show(); return;
+        }
+        var c = comboOf(e);
+        if (c.combo) finish(c.combo);
+        else keyEl.value = (c.partial ? c.partial + '+' : '') + '\u2026';
+      });
+      keyEl.addEventListener('blur', function () {
+        if (shortcutCapturing) setTimeout(function () {
+          if (shortcutCapturing && document.activeElement !== keyEl) { shortcutCapturing = false; status(''); show(); }
+        }, 150);
+      });
+      load();
+      // a change made in Settings -> Controls (or another window)
+      window.addEventListener('settings-changed', function (e) {
+        var d = e && e.detail;
+        if (d && d.keyboardBindings) load();
+      });
+      window.addEventListener('gcode-explorer-resume', function () { if (!shortcutCapturing) load(); });
+    })();
+
     /* ---------------- boot ---------------- */
     render();
-    // Pin max-width to the REAL rendered width of the first 8 category
-    // chips (All .. Canned Cycles) so at maximum size the chips settle
-    // into exactly two rows, top row wider than the bottom. Measuring
-    // the live DOM (not estimating) accounts for any padding/font the
-    // host app's CSS adds to buttons. Narrower windows still wrap the
-    // chips responsively onto more rows via flex-wrap. Set once on the
-    // root, so all three tabs share the identical width.
-    (function fitWidthToChipRow() {
-      try {
-        if (state.tab !== 'reference') return; // chips not rendered - keep CSS fallback
-        var chipsEl = document.getElementById('gref-chips');
-        var kids = chipsEl && chipsEl.children;
-        if (!kids || kids.length < 8 || !kids[0].offsetWidth) return;
-        var w = 0;
-        for (var i = 0; i < 8; i++) w += kids[i].offsetWidth;
-        w += 7 * 6;  // flex gaps between the 8 chips
-        w += 48;     // container horizontal padding + scrollbar allowance
-        var px = Math.ceil(w);
-        if (px > 500 && px < 2200) {
-          CHIP_CAP_PX = px;
-          applyTabWidth();
-        }
-      } catch (e) { /* keep the CSS fallback */ }
-    })();
     var searchEl = document.getElementById('gref-search');
+    var clearEl = document.getElementById('gref-search-clear');
+    function syncClear() { if (clearEl) clearEl.style.display = searchEl.value ? '' : 'none'; }
     searchEl.value = state.query;
+    syncClear();
     searchEl.addEventListener('input', function () {
       state.query = searchEl.value;
       state.open = {}; // collapse on new search
+      syncClear();
       renderReference();
     });
+    // one click back to the full, unfiltered list
+    if (clearEl) clearEl.addEventListener('click', function () {
+      searchEl.value = '';
+      state.query = '';
+      state.open = {};
+      delete tabScroll.reference;
+      syncClear();
+      renderReference();
+      var list = document.getElementById('gref-reflist');
+      if (list) list.scrollTop = 0;
+      searchEl.focus();
+    });
     if (state.tab === 'reference') searchEl.focus();
+
+    /* ---------------- scroll memory ----------------
+       The Reference and G-code tabs share #gref-body and are redrawn on
+       every switch, so their scroll positions are remembered per tab and
+       put back after the redraw (and after a reopen). The other tabs are
+       only hidden, which keeps their scroll anyway. */
+    var ROOT = FRESH_ROOT || document.getElementById('gref-root');
+    var SCROLL_IDS = { reference: ['gref-reflist', 'gref-catnav'], explain: ['gref-filelist', 'gref-exout', 'gref-paste'] };
+    var tabScroll = {};
+    var scrollQuietUntil = 0;
+    ROOT.addEventListener('scroll', function (e) {
+      if (Date.now() < scrollQuietUntil) return;
+      var t = e.target, ids = SCROLL_IDS[state.tab];
+      if (!t || !t.id || !ids || ids.indexOf(t.id) < 0) return;
+      (tabScroll[state.tab] = tabScroll[state.tab] || {})[t.id] = t.scrollTop;
+    }, true);
+    function restoreScroll(tab) {
+      var m = tabScroll[tab];
+      if (!m) return;
+      scrollQuietUntil = Date.now() + 300;
+      Object.keys(m).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (id === 'gref-filelist') {
+          // the file list renders in chunks: render far enough first
+          var src = activeSrc(), guard = 0;
+          while (el.scrollHeight - el.clientHeight < m[id] && state.rendered < src.lines.length && guard++ < 100) appendChunk();
+        }
+        el.scrollTop = m[id];
+      });
+    }
+
+    /* ---------------- NC Manual back / forward ----------------
+       The manual is another site, so its iframe can't be asked where it
+       is. Its pages do share the browser's history with ncSender, though,
+       so Back/Forward step through that history, but only across entries
+       the manual itself added while open here. The count is kept on the
+       low side (an unexplained page load is assumed to be a step back),
+       so Back can never step past the manual into ncSender's own
+       history. */
+    var MAN = { base: -1, cur: -1, max: -1, len: 0, pending: 0, timer: null, reset: true }; // pending: our steps still loading
+    var manFrame = document.getElementById('gref-manual-frame');
+    function manButtons() {
+      var b = document.getElementById('gref-man-back'), f = document.getElementById('gref-man-fwd');
+      if (b) b.disabled = !(MAN.cur > MAN.base);
+      if (f) f.disabled = !(MAN.cur < MAN.max);
+    }
+    function manSync() {
+      var len = history.length;
+      if (len !== MAN.len) {
+        if (len > MAN.len && !MAN.pending && MAN.base >= 0) { MAN.cur = MAN.max = len - 1; } // new page or #anchor at the end
+        MAN.len = len;
+        if (MAN.max > len - 1) MAN.max = len - 1;
+        if (MAN.cur > len - 1) MAN.cur = len - 1;
+      }
+      manButtons();
+    }
+    if (manFrame) {
+      manFrame.addEventListener('load', function () {
+        if (!manFrame.getAttribute('src')) return; // the initial about:blank
+        var len = history.length;
+        if (MAN.reset || MAN.base < 0) {
+          MAN.base = MAN.cur = MAN.max = len - 1;
+          MAN.reset = false;
+        } else if (MAN.pending > 0) {
+          MAN.pending--; // one of our own Back/Forward/Home steps arriving
+        } else if (len > MAN.len) {
+          MAN.cur = MAN.max = len - 1; // a link, with nothing ahead of it
+        } else {
+          // a link after stepping back, or the browser's own Back/Forward:
+          // assume the step back, which can only undercount
+          MAN.cur = Math.max(MAN.base, MAN.cur - 1);
+          MAN.max = MAN.cur;
+        }
+        MAN.len = len;
+        manButtons();
+      });
+      setInterval(function () { if (state.tab === 'manual' && isShown()) manSync(); }, 400);
+    }
+    // #anchor steps fire no load, so forget pending steps a little after
+    // the last click
+    function manPending() {
+      MAN.pending++;
+      clearTimeout(MAN.timer);
+      MAN.timer = setTimeout(function () { MAN.pending = 0; }, 2500);
+    }
+    window.grefManualNav = function (dir) {
+      if (!manFrame) return;
+      manSync();
+      if (dir === 0) {
+        // a fresh page load: counts as a new step forward
+        manPending();
+        MAN.cur = MAN.cur + 1; MAN.max = MAN.cur;
+        manFrame.src = MANUAL_URL;
+        manButtons();
+        return;
+      }
+      if (dir < 0 && !(MAN.cur > MAN.base)) return;
+      if (dir > 0 && !(MAN.cur < MAN.max)) return;
+      manPending();
+      MAN.cur += dir;
+      manButtons();
+      if (dir < 0) history.back(); else history.forward();
+    };
+
+    /* ---------------- keep this instance for the next open ---------------- */
+    var keptWhole = false; // the last close moved the root out intact
+    function holderEl() {
+      var h = document.getElementById('gex-holder');
+      if (!h) {
+        h = document.createElement('div');
+        h.id = 'gex-holder';
+        h.style.display = 'none';
+        document.body.appendChild(h);
+      }
+      return h;
+    }
+    function isShown() {
+      var h = document.getElementById('gex-holder');
+      return ROOT.isConnected && !(h && h.contains(ROOT));
+    }
+    // moveBefore keeps scroll positions and the manual's iframe alive
+    function moveInto(parent, node, before) {
+      if (typeof parent.moveBefore === 'function' && node.isConnected) {
+        try { parent.moveBefore(node, before || null); return true; } catch (e) {}
+      }
+      parent.insertBefore(node, before || null);
+      return false;
+    }
+    function dialogOf() { return ROOT.closest ? ROOT.closest('.plugin-dialog-backdrop') : null; }
+    // ncSender's dialog closes on its X, a click on the backdrop and
+    // Escape; move the root out just before it removes the content.
+    function rescue() {
+      var backdrop = dialogOf();
+      if (!backdrop || !isShown()) return;
+      var content = ROOT.parentNode, next = ROOT.nextSibling;
+      keptWhole = moveInto(holderEl(), ROOT, null);
+      setTimeout(function () {
+        // the dialog stayed open after all: put the root back
+        if (backdrop.isConnected && content.isConnected && !isShown()) {
+          moveInto(content, ROOT, next && next.parentNode === content ? next : null);
+        }
+      }, 500);
+    }
+    // ncSender closes its dialog on any click that lands on the backdrop,
+    // and a drag that starts inside (selecting text, moving a slider) and
+    // ends outside produces exactly that click. Only a press AND a release
+    // outside the dialog close it; anything else is stopped here, before
+    // ncSender's own handler sees it.
+    var press = { down: false, up: false };
+    function onBackdrop(e) { var b = isShown() && dialogOf(); return !!b && e.target === b; }
+    document.addEventListener('pointerdown', function (e) { press.down = onBackdrop(e); press.up = false; }, true);
+    document.addEventListener('pointerup', function (e) { press.up = onBackdrop(e); }, true);
+    document.addEventListener('click', function (e) {
+      var backdrop = isShown() && dialogOf();
+      if (!backdrop) return;
+      var t = e.target, btn = t && t.closest ? t.closest('.close-button') : null;
+      if (t === backdrop) {
+        // e.detail === 0: a click without a pointer (keyboard, scripts)
+        if (e.detail !== 0 && !(press.down && press.up)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+        rescue();
+      } else if (btn && backdrop.contains(btn) && !ROOT.contains(btn)) {
+        rescue();
+      }
+    }, true);
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && shortcutCapturing) return; // cancels the shortcut capture instead
+      if (e.key === 'Escape' && isShown() && dialogOf()) rescue();
+    }, true);
+
+    // Put this instance into a newly opened dialog in place of its fresh
+    // copy. A terminal lookup (?word, ??line, ??) still opens on what was
+    // asked for; the Tools menu opens on whatever was showing last.
+    function adopt(fresh, data) {
+      var parent = fresh.parentNode;
+      var whole = keptWhole && ROOT.isConnected;
+      moveInto(parent, ROOT, fresh);
+      parent.removeChild(fresh);
+      keptWhole = false;
+      if (!whole) MAN.reset = true; // the manual's iframe reloaded from scratch
+      var redraw = false;
+      if (data && data.initialExplain) {
+        state.tab = 'explain';
+        state.src = 'paste';
+        state.explainText = data.initialExplain;
+        state.paste.text = data.initialExplain;
+        state.paste.lines = data.initialExplain.split(/\r?\n/);
+        state.gsel = { anchor: 0, from: 0, to: state.paste.lines.length - 1 };
+        delete tabScroll.explain;
+        redraw = true;
+      } else if (data && (data.initialQuery || data.entry === 'blank')) {
+        state.tab = 'reference';
+        state.query = data.initialQuery || '';
+        if (!data.initialQuery) state.category = 'all';
+        state.open = {};
+        delete tabScroll.reference;
+        redraw = true;
+      }
+      var se = document.getElementById('gref-search');
+      if (se) se.value = state.query;
+      syncClear();
+      if (redraw || !whole) render();
+      else if (state.tab === 'navigator') gnActivate(document.getElementById('gn-host'));
+      setTimeout(function () { restoreScroll(state.tab); }, 0);
+      // catch up with anything that changed while closed
+      loadMachineSettings();
+      refreshGcodeFile();
+      try { window.dispatchEvent(new Event('gcode-explorer-resume')); } catch (e) {}
+      try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+      if (state.tab === 'reference' && se) se.focus();
+    }
+    function dispose() {
+      try { window.dispatchEvent(new CustomEvent('gcode-explorer-dispose', { detail: { root: ROOT } })); } catch (e) {}
+      if (ROOT.parentNode) ROOT.parentNode.removeChild(ROOT);
+    }
+    window.__gcodeExplorer = { build: BUILD_ID, root: ROOT, isShown: isShown, adopt: adopt, dispose: dispose };
   })();
 </script>

@@ -60,6 +60,15 @@ let dialogCore = readFileSync(join(root, 'build/dialog-core.html'), 'utf8');
     .replace("'__NAV_MARKUP__'", markupJson)
     .replace("'__NAV_SCRIPT__'", scriptJson);
 }
+// Build id: a dialog only adopts the live instance left by an earlier
+// open (see "one live instance" in dialog-core) when it is the same build.
+{
+  const { createHash } = await import('crypto');
+  const version = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')).version;
+  const hash = createHash('sha1').update(dialogCore).update(JSON.stringify(db)).digest('hex').slice(0, 12);
+  if (!dialogCore.includes('__BUILD_ID__')) throw new Error('dialog-core.html: __BUILD_ID__ token missing');
+  dialogCore = dialogCore.split('__BUILD_ID__').join(version + '-' + hash);
+}
 const logic = readFileSync(join(root, 'build/commands-logic.js'), 'utf8');
 const configTemplate = readFileSync(join(root, 'build/config-template.html'), 'utf8');
 

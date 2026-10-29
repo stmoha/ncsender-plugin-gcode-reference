@@ -18,7 +18,7 @@ Inline G-code, M-code and `$`-setting documentation for grblHAL, classic Grbl 1.
 
 A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macro-sourced lines are never touched.
 
-**Reference browser** — 400+ entries with search, per-category color-keyed filters, syntax, parameter tables, examples and tips. Covers the grblHAL core dialect (motion, coordinate systems, probing, canned cycles, G65 built-in macros), common plugin M-codes, ncSender's own codes (macros, the `NCSENDER_PAUSE` dialog), ncSender plugin commands (`$TLS`, `$SLOT<n>`, `$PROBE`, `$MEASURE_TLO`, `$ADB_…`, Dust Docker), grblHAL and FluidNC `$` system commands, and **256 numbered settings through $772** with SLB-EXT factory defaults.
+**Reference browser** — 400+ entries with search, a category column (with match counts) like ncSender's Settings, syntax, parameter tables, examples and tips. Covers the grblHAL core dialect (motion, coordinate systems, probing, canned cycles, G65 built-in macros), common plugin M-codes, ncSender's own codes (macros, the `NCSENDER_PAUSE` dialog), ncSender plugin commands (`$TLS`, `$SLOT<n>`, `$PROBE`, `$MEASURE_TLO`, `$ADB_…`, Dust Docker), grblHAL and FluidNC `$` system commands, and **256 numbered settings through $772** with SLB-EXT factory defaults.
 
 <img width="997" height="637" alt="2026-07-12_16h15_29" src="https://github.com/user-attachments/assets/b29999d9-fc66-482f-aa44-da62158bb5ad" />
 
@@ -26,11 +26,13 @@ A bare `?` (grblHAL's real-time status query) is never intercepted, and job/macr
 
 **Explorer tab** — an interactive 2D map of the loaded toolpath. Snap to G-code lines graphically and jog the machine to them with safe-Z handling, trace a rubber-band outline of the cut area, and unwrap 4th-axis jobs to see rotary toolpaths flat. Everything it shows and sends follows ncSender's Metric/Imperial setting, whatever units the file uses. Open **Tools → G-code Explorer** and pick the Explorer tab.
 
-**G-code tab (explain a line)** — paste a whole program, or use the loaded file, and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, FluidNC `$Long/Names`, `G10 L2`/`L20` combos, `G01`→`G1` normalization, parameter assignments, `(MSG, …)` / `(PRINT, …)` / `NCSENDER_PAUSE` comments, and both comment styles. With a controller connected, lines it can't run are flagged.
+**G-code tab (explain a line)** — paste a whole program, or use the loaded file, and every line gets a word-by-word breakdown. Handles `$J=` jog bodies, `$110=5000` setting writes, FluidNC `$Long/Names`, `G10 L2`/`L20` combos, `G01`→`G1` normalization, parameter assignments, `(MSG, …)` / `(PRINT, …)` / `NCSENDER_PAUSE` comments, and both comment styles. With a controller connected, lines it can't run are flagged. Each line also shows the modes it runs under, read from the lines before it (mm/inch, absolute/relative, work or machine coordinates, feed mode), and calls out what it inherits: a repeated motion mode, a carried-over feed, a cut with the spindle off, an active G92 offset.
 
-**Manual tab** — the [official ncSender manual](https://siganberg.github.io/ncSender.manual/) embedded right in the dialog.
+**Manual tab** — the [official ncSender manual](https://siganberg.github.io/ncSender.manual/) embedded right in the dialog, with Back, Forward and Home buttons.
 
-**Settings tab** — terminal-lookup options plus full source attribution and controller-applicability notes.
+**Picks up where you left off** — close the dialog and open it again (Tools menu or a Console lookup) and every tab is as you left it: search, scroll positions, pasted code, the Explorer map and selection, the manual page.
+
+**Settings tab** — terminal-lookup options, the keyboard shortcut that opens G-code Explorer (shared with ncSender's Settings → Controls), plus full source attribution and controller-applicability notes.
 
 ## Installation
 

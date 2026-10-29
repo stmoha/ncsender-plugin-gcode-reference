@@ -46,6 +46,7 @@ function buildDialogHTML(opts) {
     initialTab: opts.initialTab || 'reference',
     initialQuery: opts.initialQuery || '',
     initialExplain: opts.initialExplain || '',
+    entry: opts.entry || '',
     showSettingsTab: true
   };
   // split/join (not String.replace) so '$' sequences in the JSON - like
@@ -105,8 +106,11 @@ function onBeforeCommand(commands, context, settings) {
       var title, html;
       if (isBlank) {
         title = 'G-code Explorer';
+        // "??" alone: the reference, unfiltered, even when the dialog
+        // comes back with the last search still in it
         html = buildDialogHTML({
-          initialTab: 'reference'
+          initialTab: 'reference',
+          entry: 'blank'
         });
       } else if (explainMatch) {
         title = 'G-code Explorer';

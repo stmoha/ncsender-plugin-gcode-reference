@@ -3437,7 +3437,14 @@
 
   // Live position poll: drives the DRO readout and the map crosshair.
   // Crosshair moves are surgical DOM updates — never a scene rebuild.
+  // The panel lives on between dialog opens (see dialog-core), so only
+  // poll while it is actually on screen.
+  function panelShown() {
+    var r = document.getElementById('gn-root');
+    return !!(r && r.offsetParent !== null);
+  }
   function pollMachineState() {
+    if (!panelShown()) return;
     api('/api/server-state').then(function (st) {
       var ms = st && (st.machineState || st.MachineState);
       if (!ms) return;
@@ -3467,8 +3474,23 @@
       viewer.updateSpindle(null);
     }
   }
-  setInterval(pollMachineState, 300);
+  var pollTimer = setInterval(pollMachineState, 300);
   pollMachineState();
+
+  // Reopened dialog: a different file loaded in ncSender meanwhile gets
+  // loaded here; the same file keeps the map, selection and contour.
+  window.addEventListener('gcode-explorer-resume', function () {
+    getCurrentGcodeText().then(function (text) {
+      if (text !== gcodeText) loadGcodeAndSettings();
+    }).catch(function () {
+      if (gcodeText !== null) loadGcodeAndSettings(); // file unloaded: show that
+    });
+  });
+  // A newer plugin build took over: stop this copy's polling.
+  window.addEventListener('gcode-explorer-dispose', function (e) {
+    var root = e && e.detail && e.detail.root, mine = document.getElementById('gn-root');
+    if (!root || (mine && root.contains(mine)) || !mine) clearInterval(pollTimer);
+  });
 
   // ==== Rotary (4th-axis) unwrapped view ====
   // Rotary G-code moves mostly in X and A, so the XY view collapses to a
