@@ -538,6 +538,13 @@
     // show which lines belong to which depth.
     var maxS = 0;
     var zLevelSet = {};
+    // Units: every coordinate is stored in mm, converted with the G20/G21
+    // mode in effect on ITS line (no declaration = G21, as ncSender
+    // assumes). A file may switch units part way - some generators end
+    // with G20 to put an inch user's controller back - so the last mode
+    // seen says nothing about the rest of the file.
+    var unitsSeen = {};
+    var firstMotionUnits = null;
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     function extend(x, y) {
@@ -595,6 +602,17 @@
       var hasMotionWord = xVal !== null || yVal !== null || zVal !== null || aVal !== null || hasI || hasJ;
       if (!hasMotionWord || !state.motion) continue;
 
+      // a G20/G21 on this line applies to this line's numbers too
+      var lineUnits = state.unitsMode === 'G20' ? 'G20' : 'G21';
+      unitsSeen[lineUnits] = true;
+      if (!firstMotionUnits) firstMotionUnits = lineUnits;
+      if (lineUnits === 'G20') {
+        if (xVal !== null) xVal *= 25.4;
+        if (yVal !== null) yVal *= 25.4;
+        if (zVal !== null) zVal *= 25.4;
+        iVal *= 25.4; jVal *= 25.4; // A stays in degrees
+      }
+
       var x0 = state.x, y0 = state.y, z0 = state.z, a0 = state.a;
       var x1 = x0, y1 = y0, z1 = z0, a1 = a0;
       if (state.positioning === 'G90') {
@@ -610,7 +628,7 @@
       }
       if (a1 !== a0) sawRotary = true;
 
-      var seg = { line: lineNo, type: state.motion, tool: state.tool, x0: x0, y0: y0, z0: z0, x1: x1, y1: y1, z1: z1, a0: a0, a1: a1, s: state.s, points: null };
+      var seg = { line: lineNo, type: state.motion, tool: state.tool, x0: x0, y0: y0, z0: z0, x1: x1, y1: y1, z1: z1, a0: a0, a1: a1, s: state.s, points: null, u: lineUnits };
       if (state.motion === 'G2' || state.motion === 'G3') {
         seg.points = tessellateArc(x0, y0, x1, y1, iVal, jVal, state.motion === 'G2');
       }
@@ -629,7 +647,9 @@
       var zLevels = Object.keys(zLevelSet).map(Number).sort(function (a, b) { return a - b; });
       return {
         segments: segments, hasRotary: sawRotary, totalLines: lines.length, tools: tools,
-        bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY }, units: state.unitsMode,
+        bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY },
+        // coordinates above are mm; units says what the file was written in
+        units: unitsSeen.G20 && unitsSeen.G21 ? 'mixed' : (firstMotionUnits || null),
         maxS: maxS, zLevels: zLevels
       };
     }
@@ -779,7 +799,8 @@
       var stride = Math.ceil(pts.length / MAX_POINTS);
       pts = pts.filter(function (_, i) { return i % stride === 0; });
     }
-    return { points: pts, step: step, polys: polys, mmScale: units === 'G20' ? 25.4 : 1 };
+    // the parser stores every coordinate in mm
+    return { points: pts, step: step, polys: polys, mmScale: 1 };
   }
 
   // Remove hull vertices that are (nearly) collinear with their neighbours,
@@ -2374,7 +2395,8 @@
   function buildLoadStatus() {
     var sz = (appSettings && appSettings.safeZHeight !== undefined) ? Number(appSettings.safeZHeight) : -5;
     return 'Loaded ' + parsed.totalLines + ' lines, ' + parsed.segments.length + ' motion segments' +
-      (parsed.units === 'G20' ? ' (inch file)' : '') + '. Safe Z Retract Height: ' + mc(sz) + ' ' + uLen() + ' (app setting).';
+      (parsed.units === 'G20' ? ' (inch file)' : parsed.units === 'mixed' ? ' (file switches between mm and inch)' : '') +
+      '. Safe Z Retract Height: ' + mc(sz) + ' ' + uLen() + ' (app setting).';
   }
   // The yellow target marker always shows the CURRENT target: the creep
   // position on the selected line, a contour vertex, or a snapped point
@@ -2653,7 +2675,7 @@
       })
       .then(function (result) {
         parsed = result;
-        fileUnitsScale = parsed.units === 'G20' ? 25.4 : 1;
+        fileUnitsScale = 1; // the parser stores every coordinate in mm
         rotaryParsedCache = null;
         var tabsEl = document.getElementById('gn-view-tabs');
         tabsEl.style.display = parsed.hasRotary ? 'flex' : 'none';
@@ -2882,7 +2904,7 @@
     var v = parseFloat(document.getElementById(id).value);
     var mm = (isFinite(v) && v > 0) ? appToMm(v) : fallbackMm;
     var st = sflAnalysis && sflAnalysis.state;
-    var fileUnits = (st && (st.units || st.Units)) || (parsed && parsed.units) || 'G21';
+    var fileUnits = (st && (st.units || st.Units)) || (selectedSegment && selectedSegment.u) || 'G21';
     var out = fileUnits === 'G20' ? mm / 25.4 : mm;
     return Math.round(out * 10000) / 10000;
   }
@@ -3273,7 +3295,7 @@
   // The map is drawn in FILE units; grbl reports WPos in mm. For G20
   // (inch) files the crosshair must divide by 25.4 or it lands 25.4x off
   // and "drifts" every jog — the sync bug you observed.
-  var fileUnitsScale = 1; // mm per file unit (25.4 when the file is G20)
+  var fileUnitsScale = 1; // mm per map unit: always 1 now that the parser converts to mm
   var JOG_FEED_Z_CAP_MM = 1200;
   // jog feeds and distances are in the app's units (see Units)
   function jogFeedXY() {

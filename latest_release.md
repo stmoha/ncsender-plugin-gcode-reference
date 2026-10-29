@@ -9,4 +9,5 @@ The Explorer tab now uses the same units as ncSender's main window (Settings →
 - **Rotary stock diameter** is entered in your units
 
 ### 🔧 Fixes
+- **Spindle marker in the wrong place**: a mm file that switches to inches anywhere (for example a `G20` at the end to put an inch controller back) was treated as inches throughout, so the spindle marker sat about 25× too close to X0 Y0. Each line now uses the units in effect on that line, and the status line says when a file switches units
 - Retract, Rapid to Point and Trace Contour no longer leave the controller in mm mode when ncSender is set to Imperial: moves are sent in your units, as ncSender's own moves are
