@@ -12,8 +12,12 @@
 - Coordinates and feeds say it in words: `Z-0.381` = "-0.381 mm, absolute in G54 work coordinates", `F508` = "508 mm/min"
 - Lines that lean on earlier lines are flagged: a move with no G0/G1 on it (and which one it repeats), a feed carried over from another line, a cut with the spindle off, an active G92 offset, a canned cycle still running
 
+![G-code tab: lines 45-47 with their mode badges - mm, absolute, G54 or G53 machine coords, G1 carried over, F1016 from line 44](https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/791582d2883c6dd38f123a719d303b2c248e460d/.github/release-images/v2.1.2-gcode-modes.png)
+
 ### ⌨️ Keyboard shortcut from the plugin
 - Settings → **Keyboard shortcut**: press the keys you want to open G-code Explorer from anywhere in ncSender. It's the same setting as ncSender's Settings → Controls → Plugins, and it warns if the keys are already in use (needs ncSender 2.0.210 or later)
+
+![Settings tab: Keyboard shortcut set to Ctrl+Shift+E](https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/791582d2883c6dd38f123a719d303b2c248e460d/.github/release-images/v2.1.2-shortcut.png)
 
 ### 🖱️ No more accidental closing
 - Selecting text or dragging a slider and letting go outside the dialog no longer closes it; it only closes when you both press and release outside (or use the ✕ / Escape)
@@ -24,6 +28,8 @@
 ### 🔎 Reference: categories in a column, one-click clear
 - The categories now sit in a column on the left, like ncSender's Settings, with a count beside each showing how many entries match your search; the definitions get the full width beside them
 - An **×** in the search box clears it and brings back the full list
+
+![Reference tab: categories in a column with match counts, search for probe with the clear button](https://raw.githubusercontent.com/stmoha/ncsender-plugin-gcode-reference/791582d2883c6dd38f123a719d303b2c248e460d/.github/release-images/v2.1.2-reference.png)
 
 ---
 

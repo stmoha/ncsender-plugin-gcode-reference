@@ -21,6 +21,9 @@ bug or feature. Claude:
   about a week earlier, an "Also new since vX.Y.Z" section rolling up the
   releases most people won't have installed yet (back to the last release
   that has been out a while), so anyone updating sees everything they get
+- for changes you can see, takes screenshots of the plugin in a mock
+  ncSender dialog and adds them to the notes; they live in
+  `.github/release-images/`, which stays out of the plugin ZIP
 
 ## 2. You test the ZIP first
 - Claude packages the change exactly like the release workflow does
