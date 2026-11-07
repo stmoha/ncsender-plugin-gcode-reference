@@ -14,6 +14,10 @@ Local clone (optional): C:\Users\stefa\Documents\GitHub\ncsender-plugin-gcode-re
 In a Claude session with this repo attached (push access), describe the
 bug or feature. Claude:
 - works on a fresh clone of this repo — GitHub is always the source of truth
+- checks ncSender's latest source and the plugins in the registry for `$`
+  settings and `$` commands the database doesn't have yet, and offers to
+  add them. **Next update:** you've spotted at least one new `$` value
+  (Nov 2026), so this check comes first
 - edits the sources (`gcode-database.js`, `build/*`), runs
   `node build/build.mjs`, and tests the result in a headless browser,
   in landscape and on a portrait 1080×1920 screen (ncSender's kiosk)
