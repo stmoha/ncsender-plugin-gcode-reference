@@ -66,10 +66,13 @@ Compiled from the [Sienci Labs SLB firmware documentation](https://resources.sie
 - `build/config-template.html` — thin wrapper choosing the default tab per context
 
 ```bash
-node build/build.mjs
+node build/build.mjs             # regenerate commands.js and config.html
+node test/run-all.mjs            # every test (the e2e-* suites need Playwright with Chromium)
+.scripts/package.sh v2.1.5-test1 # dist/com.cncdocs.gcode-reference_v2.1.5-test1.zip, as the release packs it
+node test/shots.cjs              # release-note screenshots (portrait 1080x1920) into test/out/
 ```
 
-`index.js` adapts the same `commands.js` logic to the Node-based ncSender platforms (v1/pro-v1).
+`index.js` adapts the same `commands.js` logic to the Node-based ncSender platforms (v1/pro-v1). The browser tests run the plugin in a stand-in ncSender (ncSender's dialog CSS and a mock API); the options for `test/shots.cjs` are listed at the top of that file. Working on this repo with Claude Code: [CLAUDE.md](CLAUDE.md).
 
 ### Releasing
 

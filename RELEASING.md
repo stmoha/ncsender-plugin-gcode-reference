@@ -32,8 +32,10 @@ bug or feature. Claude:
   plugin ZIP
 
 ## 2. You test the ZIP first
-- Claude packages the change exactly like the release workflow does
-  (`com.cncdocs.gcode-reference_vX.Y.Z-test.zip`) and sends it to you
+- Claude runs every test (`node test/run-all.mjs`) and packages the change
+  with the script the release workflow uses
+  (`.scripts/package.sh vX.Y.Z-test1` →
+  `dist/com.cncdocs.gcode-reference_vX.Y.Z-test1.zip`) and sends it to you
 - ncSender → Settings → Plugins → Install Plugin → upload the ZIP, then
   hard-refresh (Ctrl+F5) and try the change
 - nothing is on GitHub yet; ask for fixes and you get a new test ZIP

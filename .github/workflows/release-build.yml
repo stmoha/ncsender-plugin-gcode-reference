@@ -52,27 +52,12 @@ jobs:
           echo "Tag: $TAG"
 
       - name: Create plugin package
+        # the same script makes the test ZIPs, so a test build holds exactly
+        # what the release will (what's left out: EXCLUDE in the script)
+        env:
+          TAG: ${{ steps.plugin_info.outputs.TAG }}
         run: |
-          mkdir -p dist
-          PLUGIN_ID="${{ steps.plugin_info.outputs.PLUGIN_ID }}"
-          TAG="${{ steps.plugin_info.outputs.TAG }}"
-          ZIP_NAME="${PLUGIN_ID}_${TAG}.zip"
-
-          # Create a temporary directory for the plugin
-          mkdir -p "tmp/$PLUGIN_ID"
-
-          # Copy all files except .git, .github, .scripts, dist, and latest_release.md
-          rsync -av --exclude='.git' --exclude='.github' --exclude='.scripts' --exclude='dist' --exclude='latest_release.md' --exclude='tmp' ./ "tmp/$PLUGIN_ID/"
-
-          # Create zip from the temporary directory
-          cd tmp
-          zip -r "../dist/$ZIP_NAME" "$PLUGIN_ID"
-          cd ..
-
-          # Cleanup
-          rm -rf tmp
-
-          echo "Created package: dist/$ZIP_NAME"
+          bash .scripts/package.sh "$TAG"
           ls -lh dist/
 
       - name: Get release notes from latest_release.md
