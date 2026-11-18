@@ -222,5 +222,11 @@ committed. Never edit them; rebuild after every source change.
     yet. About 200 older firmware-plugin settings (WiFi, Bluetooth, plasma THC,
     PID, panel, extra axes) have never been in the database; ask Stefan before
     adding them.
+- **Weekly check, scheduled:** a scheduled task ("G-code Explorer weekly source
+  check", Mondays 2:17 pm Pacific) runs the database check in a fresh session.
+  With findings it prepares a branch, screenshots and a test ZIP and alerts
+  Stefan; it never merges, releases or installs. When a check's changes are
+  merged, keep the "Last done" record above current so the next run starts
+  from it.
 - Asked of Francis (siganberg) for the plugin API: right-click actions on
   G-code lines (GitHub Discussion #73 on siganberg/ncSender).
