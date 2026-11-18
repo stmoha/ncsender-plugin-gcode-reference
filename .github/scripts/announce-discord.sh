@@ -47,7 +47,8 @@ grep -q '^## Also new since' "$NOTES" && ROLLUP=$(grep -m1 '^## Also new since' 
 MAX=3600
 if [ "${#DESC}" -gt "$MAX" ]; then
   DESC="${DESC:0:$MAX}"
-  DESC="${DESC%$'\n'*}"$'\n…'
+  # cut at the last whole line, and say where the rest is
+  DESC="${DESC%$'\n'*}"$'\n\n'"**…and more:** see the [full release notes](${RELEASE_URL})."
 fi
 [ -n "$ROLLUP" ] && DESC="${DESC}"$'\n\n'"**${ROLLUP}:** see the [full release notes](${RELEASE_URL})."
 
