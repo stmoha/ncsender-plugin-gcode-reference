@@ -77,9 +77,15 @@ laptop has an older ncSender install that is usually not running). A cloud
 session can't reach his network, so the install goes through his Windows laptop
 with the Desktop Commander connector. It worked this way for 2.2.0-test2.
 1. Push the branch first; the laptop takes the build from GitHub.
-2. `list_devices`: the laptop must be **Online**. If not, ask him to start
-   Desktop Commander there. Each call waits 3 s at most; longer commands carry on
-   in the background, so read the rest with `read_process_output`.
+2. `list_devices`: the laptop must be **Online**. If it is Offline (or calls
+   start failing), ask Stefan to run **`DesktopCommander-Remote.cmd`** on the
+   laptop and leave its window open; only he can, since the link is what's down.
+   - The file is one line, in case he needs it again:
+     `powershell.exe -NoProfile -Command "irm -ErrorAction Stop https://raw.githubusercontent.com/wonderwhy-er/DesktopCommanderMCP/main/scripts/remote/remote-windows.ps1 | iex"`
+   - It fetches Desktop Commander's own launcher, which starts the remote link
+     and brings the app up to date (0.3.1 became 0.3.3 on 18 Nov 2026).
+   - Each call waits 3 s at most; longer commands carry on in the background, so
+     read the rest with `read_process_output`.
 3. From the laptop, the Radxa answers as `ncsender` (or `ncsender.local`) on port
    8090. Before installing, check nothing is running: `/api/gcode-job/status`
    (`jobLoaded`) and `/api/server-state`.
