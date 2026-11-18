@@ -203,7 +203,8 @@ committed. Never edit them; rebuild after every source change.
 - **Database check, each update:** compare the database with ncSender's source,
   every plugin repo in the registry and grblHAL core. Last done for 2.2.0
   (18 Nov 2026) against ncSender v2.0.228 (the same commit as `main`), the 23
-  other registry plugins as of that day, and grblHAL build 20261117.
+  other registry plugins as of that day, grblHAL build 20261117, and FluidNC
+  `main` at d299736 (release v4.1.1).
   - All of them are public, so `git clone --depth 1` works without attaching them.
   - ncSender: `src/NcSender.Server/CommandProcessor/` and
     `src/NcSender.Core/Utils/GcodePatterns.cs` (its own `$` commands),
@@ -216,14 +217,28 @@ committed. Never edit them; rebuild after every source change.
     and `#<…>` names; the README and `latest_release.md` for what changed.
   - grblHAL: `settings.h` (the `setting_id_t` enum) against `SETTINGS_DB`,
     `settings.c` for names and options, `system.c` (`sys_commands`),
-    `ngc_params.c`, and `changelog.md` since the last check.
+    `ngc_params.c`, and `changelog.md` since the last check. Every named
+    parameter in `ngc_params.c` is in the database as of 2.2.0.
+  - FluidNC (`bdring/FluidNC`): commands are the `new UserCommand(` /
+    `new WebCommand(` lines in `FluidNC/src/ProcessSettings.cpp` and
+    `FileCommands.cpp`; parameters are in `Parameters.cpp`. To tell what is in a
+    release, fetch the tag and `git grep` it. Left out: the `ESP…` web-page
+    commands, WiFi / Ethernet set-up, `$CRASH`, and the JSON and hash variants.
+  - Web pages: Sienci's firmware pages (resources.sienci.com) sit behind a
+    browser check that scripts can't pass, so they can't be read automatically;
+    don't work around it. The ncSender manual now redirects to docs.ncsender.xyz
+    and the grblHAL community docs page answered 404 on 18 Nov 2026; read both
+    from their git repos (`siganberg/ncSender.manual`, `petervanderwalt/grblhal_docs`).
+    The Grbl wiki is a git repo too (`gnea/grbl.wiki.git`).
   - Left out on purpose: `$702` (cutter compensation options), `$721` (MPG port)
     and `$474`/`$475` are ids reserved in `settings.h` with no setting behind them
     yet. About 200 older firmware-plugin settings (WiFi, Bluetooth, plasma THC,
     PID, panel, extra axes) have never been in the database; ask Stefan before
     adding them.
 - **Weekly check, scheduled:** a scheduled task ("G-code Explorer weekly source
-  check", Mondays 2:17 pm Pacific) runs the database check in a fresh session.
+  check", Mondays 2:17 pm Pacific) runs the database check in a fresh session,
+  in the `ncsender-plugin-gcode-reference` cloud environment (which allows the
+  three documentation hosts).
   With findings it prepares a branch, screenshots and a test ZIP and alerts
   Stefan; it never merges, releases or installs. When a check's changes are
   merged, keep the "Last done" record above current so the next run starts

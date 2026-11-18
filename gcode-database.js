@@ -2430,7 +2430,10 @@ export const GCODE_DB = [
    "#<_z>",
    "#<_a>",
    "#<_b>",
-   "#<_c>"
+   "#<_c>",
+   "#<_u>",
+   "#<_v>",
+   "#<_w>"
   ],
   "name": "Current Work Position",
   "category": "params",
@@ -2456,7 +2459,10 @@ export const GCODE_DB = [
    "#<_abs_z>",
    "#<_abs_a>",
    "#<_abs_b>",
-   "#<_abs_c>"
+   "#<_abs_c>",
+   "#<_abs_u>",
+   "#<_abs_v>",
+   "#<_abs_w>"
   ],
   "name": "Current Machine Position",
   "category": "params",
@@ -2499,13 +2505,16 @@ export const GCODE_DB = [
  {
   "code": "#<_current_tool>",
   "aliases": [
-   "#<_selected_tool>"
+   "#<_selected_tool>",
+   "#<_current_pocket>",
+   "#<_selected_pocket>",
+   "#<_tool_table_size>"
   ],
   "name": "Tool Numbers",
   "category": "params",
   "modal": null,
-  "desc": "#<_current_tool> is the number of the tool in the spindle (0 = none). #<_selected_tool> is the tool picked with a T word that M6 has not loaded yet, or -1 when nothing is waiting. Read-only.",
-  "syntax": "#<_current_tool> | #<_selected_tool>",
+  "desc": "#<_current_tool> is the number of the tool in the spindle (0 = none). #<_selected_tool> is the tool picked with a T word that M6 has not loaded yet, or -1 when nothing is waiting. Read-only. With a tool table, #<_current_pocket> and #<_selected_pocket> are the magazine pockets of those two tools, and #<_tool_table_size> is how many tools the table holds (0 = no tool table).",
+  "syntax": "#<_current_tool> | #<_selected_tool> | #<_current_pocket> | #<_selected_pocket> | #<_tool_table_size>",
   "params": {},
   "example": "o100 IF [#<_current_tool> NE 3]\nT3 M6\no100 ENDIF",
   "tips": null,
@@ -2515,20 +2524,23 @@ export const GCODE_DB = [
    "current tool",
    "selected tool",
    "parameter",
-   "variable"
+   "variable",
+   "pocket",
+   "tool table"
   ]
  },
  {
   "code": "#<_probe_state>",
   "aliases": [
    "#<_toolsetter_state>",
-   "#<_probe2_state>"
+   "#<_probe2_state>",
+   "#<_active_probe>"
   ],
   "name": "Probe and Tool Setter Inputs",
   "category": "params",
   "modal": null,
-  "desc": "The state of the probe input, the tool setter input and a second probe: 1 = triggered, 0 = not triggered, -1 = the board has no such input. Tool-changer plugins read them to check a tool is in the spindle (an infrared sensor wired to one of these inputs). Read-only.",
-  "syntax": "#<_probe_state> | #<_toolsetter_state> | #<_probe2_state>",
+  "desc": "The state of the probe input, the tool setter input and a second probe: 1 = triggered, 0 = not triggered, -1 = the board has no such input. Tool-changer plugins read them to check a tool is in the spindle (an infrared sensor wired to one of these inputs). Read-only. #<_active_probe> says which one G38 moves are using right now: 0 = probe, 1 = tool setter, 2 = second probe (G65 P5 switches between them).",
+  "syntax": "#<_probe_state> | #<_toolsetter_state> | #<_probe2_state> | #<_active_probe>",
   "params": {},
   "example": "o100 IF [#<_probe_state> EQ 1]\n(MSG, The probe is already touching - check it)\nM0\no100 ENDIF",
   "tips": "The value is read when the line is, so put G4 P0 in front to let earlier moves finish first.",
@@ -2548,13 +2560,15 @@ export const GCODE_DB = [
   "aliases": [
    "#<_feed_override>",
    "#<_feed>",
-   "#<_rpm>"
+   "#<_rpm>",
+   "#<_feed_hold>",
+   "#<_adaptive_feed>"
   ],
   "name": "Override Switches, Feed and Spindle Speed",
   "category": "params",
   "modal": null,
-  "desc": "#<_speed_override> is 1 while the spindle speed override is allowed to act (M51 P1) and 0 while a program has switched it off (M51 P0); #<_feed_override> is the same for the feed override (M50). They are on/off flags, not percentages. #<_feed> is the programmed feed rate and #<_rpm> the programmed spindle speed. Read-only.",
-  "syntax": "#<_speed_override> | #<_feed_override> | #<_feed> | #<_rpm>",
+  "desc": "#<_speed_override> is 1 while the spindle speed override is allowed to act (M51 P1) and 0 while a program has switched it off (M51 P0); #<_feed_override> is the same for the feed override (M50). #<_feed_hold> is 1 while the feed hold button is allowed to act (M53). They are on/off flags, not percentages. #<_adaptive_feed> is always 0 - grblHAL has no adaptive feed. #<_feed> is the programmed feed rate and #<_rpm> the programmed spindle speed. Read-only.",
+  "syntax": "#<_speed_override> | #<_feed_override> | #<_feed> | #<_rpm> | #<_feed_hold>",
   "params": {},
   "example": "#<return_spov> = #<_speed_override>\nM51 P0   (run at the programmed speed)\n(... tool change ...)\nM51 P[#<return_spov>]",
   "tips": "Tool-changer plugins switch the spindle override off for the change, so the collet nut is tightened at the speed they ask for, and put it back afterwards.",
@@ -2566,6 +2580,233 @@ export const GCODE_DB = [
    "m51",
    "feed rate",
    "rpm",
+   "parameter",
+   "variable",
+   "feed hold",
+   "m53"
+  ]
+ },
+ {
+  "code": "#<_motion_mode>",
+  "aliases": [
+   "#<_plane>",
+   "#<_coord_system>",
+   "#<_ccomp>"
+  ],
+  "name": "Active Modes as Numbers",
+  "category": "params",
+  "modal": null,
+  "desc": "The G-code in force for a few modal groups, written as the code times ten. #<_motion_mode>: 0 = G0, 10 = G1, 20 = G2, 30 = G3, 382 = G38.2, 810 = G81 and so on. #<_plane>: 170, 180 or 190 for G17, G18, G19. #<_coord_system>: 540 for G54 up to 590 for G59, then 591, 592, 593 for G59.1-G59.3. #<_ccomp>: 400 with cutter compensation off (G40). Read-only.",
+  "syntax": "#<_motion_mode> | #<_plane> | #<_coord_system> | #<_ccomp>",
+  "params": {},
+  "example": "#<saved_wcs> = #<_coord_system>\nG55\n(... work in G55 ...)\nG[#<saved_wcs> / 10]   (back to where you were)",
+  "tips": "#5220 gives the work coordinate system as a plain 1 to 9, which is easier to use with G10.",
+  "keywords": [
+   "modal",
+   "modes",
+   "motion mode",
+   "plane",
+   "coordinate system",
+   "g54",
+   "g17",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_inverse_time>",
+  "aliases": [
+   "#<_units_per_minute>",
+   "#<_units_per_rev>"
+  ],
+  "name": "Feed Mode Right Now",
+  "category": "params",
+  "modal": null,
+  "desc": "Which feed mode is active: #<_units_per_minute> is 1 in G94 (the normal one), #<_inverse_time> is 1 in G93 and #<_units_per_rev> is 1 in G95. The other two read 0. Read-only.",
+  "syntax": "#<_units_per_minute> | #<_inverse_time> | #<_units_per_rev>",
+  "params": {},
+  "example": "o100 IF [#<_inverse_time> EQ 1]\nG94\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "feed mode",
+   "inverse time",
+   "g93",
+   "g94",
+   "g95",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_spindle_on>",
+  "aliases": [
+   "#<_spindle_cw>",
+   "#<_spindle_rpm_mode>",
+   "#<_spindle_css_mode>"
+  ],
+  "name": "Spindle State",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_spindle_on> is 1 while the spindle is running (M3 or M4) and 0 after M5. #<_spindle_cw> is 1 when it turns, or would turn, clockwise (M3) and 0 for counter-clockwise (M4). #<_spindle_rpm_mode> is 1 in the normal RPM mode (G97) and #<_spindle_css_mode> is 1 in constant surface speed (G96, lathes). Read-only.",
+  "syntax": "#<_spindle_on> | #<_spindle_cw> | #<_spindle_rpm_mode> | #<_spindle_css_mode>",
+  "params": {},
+  "example": "#<was_on> = #<_spindle_on>\nM5\n(... probe ...)\no100 IF [#<was_on> EQ 1]\nM3\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "spindle",
+   "spindle on",
+   "running",
+   "m3",
+   "m4",
+   "m5",
+   "direction",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_mist>",
+  "aliases": [
+   "#<_flood>"
+  ],
+  "name": "Coolant State",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_mist> is 1 while mist coolant is on (M7) and #<_flood> is 1 while flood coolant is on (M8); both are 0 after M9. Read-only. Handy when a macro switches an output wired to M7 or M8 - a dust boot, an air blast - and has to put it back as it was.",
+  "syntax": "#<_mist> | #<_flood>",
+  "params": {},
+  "example": "#<was_flood> = #<_flood>\nM9\n(... tool change ...)\no100 IF [#<was_flood> EQ 1]\nM8\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "coolant",
+   "mist",
+   "flood",
+   "m7",
+   "m8",
+   "m9",
+   "dust boot",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_retract_r_plane>",
+  "aliases": [
+   "#<_retract_old_z>"
+  ],
+  "name": "Canned Cycle Retract Mode",
+  "category": "params",
+  "modal": null,
+  "desc": "Which retract mode drilling cycles are in: G98 (back up to the Z the cycle started from) or G99 (back to the R height only). One of the two reads 1 and the other 0. Read-only.",
+  "syntax": "#<_retract_r_plane> | #<_retract_old_z>",
+  "params": {},
+  "example": "(PRINT, retract flags: #<_retract_r_plane> #<_retract_old_z>)",
+  "tips": null,
+  "keywords": [
+   "canned cycle",
+   "retract",
+   "g98",
+   "g99",
+   "drilling",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_lathe_diameter_mode>",
+  "aliases": [
+   "#<_lathe_radius_mode>",
+   "#<_ijk_absolute_mode>"
+  ],
+  "name": "Lathe Modes",
+  "category": "params",
+  "modal": null,
+  "desc": "For lathes: #<_lathe_diameter_mode> is 1 in G7 (X is a diameter) and #<_lathe_radius_mode> is 1 in G8 (X is a radius). #<_ijk_absolute_mode> is always 0 - arc centres (I, J, K) are always measured from the start of the arc. Read-only.",
+  "syntax": "#<_lathe_diameter_mode> | #<_lathe_radius_mode> | #<_ijk_absolute_mode>",
+  "params": {},
+  "example": "(PRINT, diameter mode: #<_lathe_diameter_mode>)",
+  "tips": null,
+  "keywords": [
+   "lathe",
+   "diameter",
+   "radius",
+   "g7",
+   "g8",
+   "arc",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_line>",
+  "aliases": [
+   "#<_call_level>"
+  ],
+  "name": "Line Number and Call Depth",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_line> is the last N line number the controller read. #<_call_level> is how many subprogram or macro calls deep the program is (0 in the main program). Read-only.",
+  "syntax": "#<_line> | #<_call_level>",
+  "params": {},
+  "example": "(PRINT, at line #<_line>, call depth #<_call_level>)",
+  "tips": "ncSender numbers the lines of a job as it sends them, so #<_line> follows the line of the file that is running.",
+  "keywords": [
+   "line number",
+   "n word",
+   "subprogram",
+   "call",
+   "depth",
+   "nesting",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_vmajor>",
+  "aliases": [
+   "#<_vminor>",
+   "#<_free_memory>"
+  ],
+  "name": "Firmware Version and Free Memory",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_vmajor> is the Grbl version the firmware answers as (1.1) and #<_vminor> is the grblHAL build date without the 20 in front (261117 for build 20261117), so a macro can check the firmware is new enough for what it uses. #<_free_memory> is the controller's free memory in KB, or -1 if the board can't tell. Read-only.",
+  "syntax": "#<_vmajor> | #<_vminor> | #<_free_memory>",
+  "params": {},
+  "example": "o100 IF [#<_vminor> LT 260811]\n(MSG, This macro needs grblHAL build 20260811 or later)\nM2\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "version",
+   "build",
+   "firmware",
+   "memory",
+   "heap",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_value>",
+  "aliases": [
+   "#<_value_returned>",
+   "#<_value2>",
+   "#<_value3>"
+  ],
+  "name": "Answer from a Built-in Macro",
+  "category": "params",
+  "modal": null,
+  "desc": "Where grblHAL's built-in G65 macros put their answer. After G65 P1 (read a setting), G65 P2 (read a tool offset) and the like, the result is in #<_value>, and #<_value_returned> is 1 if there was one and 0 if not. G65 P7 (talk to a Modbus device) can hand back up to three numbers: #<_value>, #<_value2> and #<_value3>, with #<_value_returned> saying how many.",
+  "syntax": "#<_value> | #<_value_returned> | #<_value2> | #<_value3>",
+  "params": {},
+  "example": "G65 P1 Q110\n(PRINT, X max rate is #<_value>)",
+  "tips": "Read the value straight after the G65 line - the next built-in macro overwrites it.",
+  "keywords": [
+   "g65",
+   "macro",
+   "return value",
+   "result",
+   "setting",
+   "modbus",
    "parameter",
    "variable"
   ]
@@ -5967,8 +6208,8 @@ export const SYSTEM_DB = [
   { code: '$E', aliases: ['$Errors/List'], name: 'List error codes (FluidNC)', desc: 'Lists every error:NN code with its meaning.', syntax: '$E', example: '$E', keywords: ['errors', 'error codes', 'list', 'fluidnc'] },
   { code: '$MD', aliases: ['$Motor/Disable', '$ME', '$Motor/Enable'], name: 'Turn motors off / on (FluidNC)', desc: '$MD turns the stepper motors off so the axes can be moved by hand; $ME turns them back on. Add an axis to do just one ($MD=Z) — not possible when the motors share one enable pin.', syntax: '$MD | $MD=<axis> | $ME | $ME=<axis>', example: '$MD=X\n$ME', tips: 'Position is no longer trustworthy after moving an axis by hand — re-home before cutting.', keywords: ['motors', 'disable', 'enable', 'steppers off', 'free', 'fluidnc'] },
   { code: '$Bye', aliases: [], name: 'Restart controller (FluidNC)', desc: 'Restarts FluidNC — the same as cycling power. The connection drops; reconnect afterwards. Needed for changes to config.yaml or $Config/Filename to take effect.', syntax: '$Bye', example: '$Bye', keywords: ['restart', 'reboot', 'reset', 'bye', 'fluidnc'] },
-  { code: '$LocalFS/List', aliases: ['$LocalFS/Show', '$LocalFS/Run', '$LocalFS/Delete', '$LocalFS/Rename'], name: 'Controller files (FluidNC)', desc: 'Works with the files in FluidNC\'s own flash memory, where config.yaml lives: $LocalFS/List lists them, $LocalFS/Show=<file> prints one, $LocalFS/Run=<file> runs a G-code file on the controller, $LocalFS/Delete=<file> removes one.', syntax: '$LocalFS/List | $LocalFS/Show=<file> | $LocalFS/Run=<file> | $LocalFS/Delete=<file>', example: '$LocalFS/List', tips: 'ncSender sends console lines in capitals, so files with lower-case names (config.yaml) can\'t be reached this way yet — use ncSender\'s Config tab or FluidNC\'s web page for those.', keywords: ['files', 'localfs', 'flash', 'littlefs', 'config.yaml', 'fluidnc'] },
-  { code: '$SD/List', aliases: ['$SD/Run', '$SD/Show', '$SD/Delete', '$SD/Status'], name: 'SD card files (FluidNC)', desc: '$SD/List lists the files on the controller\'s SD card, $SD/Run=<file> runs one as a job on the controller, $SD/Show=<file> prints it, $SD/Delete=<file> removes it and $SD/Status shows whether a card is in.', syntax: '$SD/List | $SD/Run=<file> | $SD/Show=<file> | $SD/Status', example: '$SD/List', tips: 'A job run from the SD card is streamed by FluidNC itself, not by ncSender. File names are sent in capitals from ncSender\'s console.', keywords: ['sd card', 'files', 'run file', 'fluidnc'] },
+  { code: '$LocalFS/List', aliases: ['$LocalFS/Show', '$LocalFS/Run', '$LocalFS/Delete', '$LocalFS/Rename', '$LocalFS/Mkdir', '$LocalFS/Size'], name: 'Controller files (FluidNC)', desc: 'Works with the files in FluidNC\'s own flash memory, where config.yaml lives: $LocalFS/List lists them, $LocalFS/Show=<file> prints one, $LocalFS/Run=<file> runs a G-code file on the controller, $LocalFS/Delete=<file> removes one, $LocalFS/Rename=<old>><new> renames or moves one, and $LocalFS/Size shows how much of the flash is used. On FluidNC newer than 4.1.1, $LocalFS/Mkdir=<folder> makes a folder, with any folders above it that are missing.', syntax: '$LocalFS/List | $LocalFS/Show=<file> | $LocalFS/Run=<file> | $LocalFS/Delete=<file> | $LocalFS/Rename=<old>><new> | $LocalFS/Mkdir=<folder> | $LocalFS/Size', example: '$LocalFS/Rename=old.nc>new.nc', tips: 'ncSender sends console lines in capitals, so files with lower-case names (config.yaml) can\'t be reached this way yet — use ncSender\'s Config tab or FluidNC\'s web page for those.', keywords: ['files', 'localfs', 'flash', 'littlefs', 'config.yaml', 'rename', 'folder', 'mkdir', 'fluidnc'] },
+  { code: '$SD/List', aliases: ['$SD/Run', '$SD/Show', '$SD/Delete', '$SD/Rename', '$SD/Mkdir', '$SD/Status'], name: 'SD card files (FluidNC)', desc: '$SD/List lists the files on the controller\'s SD card, $SD/Run=<file> runs one as a job on the controller, $SD/Show=<file> prints it, $SD/Delete=<file> removes it, $SD/Rename=<old>><new> renames or moves it, and $SD/Status shows whether a card is in. On FluidNC newer than 4.1.1, $SD/Mkdir=<folder> makes a folder, with any folders above it that are missing.', syntax: '$SD/List | $SD/Run=<file> | $SD/Show=<file> | $SD/Delete=<file> | $SD/Rename=<old>><new> | $SD/Mkdir=<folder> | $SD/Status', example: '$SD/List', tips: 'A job run from the SD card is streamed by FluidNC itself, not by ncSender. File names are sent in capitals from ncSender\'s console.', keywords: ['sd card', 'files', 'run file', 'rename', 'folder', 'mkdir', 'fluidnc'] },
   { code: '$Config/Filename', aliases: [], name: 'Active config file (FluidNC)', desc: 'Shows which YAML file FluidNC loads at boot (config.yaml unless changed). $Config/Filename=<file> picks another one; it takes effect after $Bye.', syntax: '$Config/Filename | $Config/Filename=<file>', example: '$Config/Filename', tips: 'ncSender reads this to open the right file in its Config tab.', keywords: ['config file', 'yaml', 'filename', 'fluidnc'] },
   { code: '$Message/Level', aliases: [], name: 'Message level (FluidNC)', desc: 'Sets how much FluidNC reports: None, Error, Warning, Info (the default), Debug or Verbose. At Debug, (DEBUG, …) comments are printed too.', syntax: '$Message/Level=<None|Error|Warning|Info|Debug|Verbose>', example: '$Message/Level=Debug', keywords: ['messages', 'log level', 'debug', 'verbose', 'fluidnc'] },
   { code: '$PL', aliases: ['$Parameters/List'], name: 'List parameters (FluidNC)', desc: 'Lists the # parameters FluidNC is holding — numbered and named — with their values. Handy when a macro\'s math isn\'t doing what you expect.', syntax: '$PL', example: '$PL', keywords: ['parameters', 'variables', 'named parameters', 'macro', 'fluidnc'] },
@@ -5976,8 +6217,13 @@ export const SYSTEM_DB = [
   { code: '$Limits', aliases: ['$Limits/Show'], name: 'Watch limit switches (FluidNC)', desc: 'Prints the state of the limit switches, probe and tool setter twice a second, so you can press each switch by hand and see it register. Send ! (feed hold) to stop it.', syntax: '$Limits', example: '$Limits', tips: 'Keeps running until stopped — use ncSender\'s Pause (feed hold).', keywords: ['limits', 'switches', 'test', 'probe', 'wiring', 'fluidnc'] },
   { code: '$T', aliases: ['$State'], name: 'Show machine state (FluidNC)', desc: 'Prints the current machine state by number and name (Idle, Run, Hold, Alarm …).', syntax: '$T', example: '$T', keywords: ['state', 'status', 'fluidnc'] },
   { code: '$RM', aliases: ['$Macros/Run'], name: 'Run config macro (FluidNC)', desc: 'Runs one of the four macros defined under macros: in config.yaml (macro0–macro3).', syntax: '$RM=<0-3>', example: '$RM=0', keywords: ['macro', 'run macro', 'config macro', 'fluidnc'] },
-  { code: '$RI', aliases: ['$Report/Interval'], name: 'Automatic status reports (FluidNC)', desc: 'Makes FluidNC send a status report on its own every <ms> milliseconds on this connection; 0 turns it off.', syntax: '$RI=<ms>', example: '$RI=0', tips: 'ncSender asks for status itself, so you normally leave this alone.', keywords: ['report', 'interval', 'status', 'auto report', 'fluidnc'] },
+  { code: '$RI', aliases: ['$Report/Interval'], name: 'Automatic status reports (FluidNC)', desc: 'Makes FluidNC send status reports on its own on this connection instead of waiting to be asked. With $RI=<ms> it reports whenever something changes and, while the machine is moving, every <ms> milliseconds (50 at the least). A minus sign in front ($RI=-500) keeps the timed reports coming while the machine is idle as well. $RI=0 turns it off, and $RI on its own shows the current setting.', syntax: '$RI=<ms> | $RI=-<ms> | $RI=0 | $RI', example: '$RI=-500', tips: 'ncSender asks for status itself, so you normally leave this alone.', keywords: ['report', 'interval', 'status', 'auto report', 'idle', 'fluidnc'] },
   { code: '$Heap', aliases: ['$Heap/Show'], name: 'Free memory (FluidNC)', desc: 'Shows how much memory the controller has free — mainly useful when chasing crashes or WiFi trouble.', syntax: '$Heap', example: '$Heap', keywords: ['memory', 'heap', 'free', 'fluidnc'] },
+  { code: '$LocalFS/Backup', aliases: ['$LocalFS/Restore', '$LocalFS/Migrate', '$LocalFS/Format'], name: 'Back up, restore or wipe the controller\'s flash (FluidNC)', desc: '$LocalFS/Backup copies everything in FluidNC\'s flash memory - config.yaml, macros, the web page files - into a folder called localfs_copy on the SD card, and $LocalFS/Restore copies it back. $LocalFS/Format wipes the flash and leaves it empty. $LocalFS/Migrate does all three in one go: back up, wipe, restore.', syntax: '$LocalFS/Backup | $LocalFS/Restore | $LocalFS/Migrate | $LocalFS/Format', example: '$LocalFS/Backup', tips: 'Format removes config.yaml as well, so FluidNC has no machine setup until you put one back - run Backup first. Backup, Restore and Migrate need an SD card in the controller.', keywords: ['backup', 'restore', 'format', 'wipe', 'migrate', 'flash', 'localfs', 'config.yaml', 'fluidnc'] },
+  { code: '$GI', aliases: ['$GPIO/Input', '$GO', '$GPIO/Output', '$G+', '$GPIO/On', '$G-', '$GPIO/Off', '$GR', '$GPIO/Read'], name: 'Test one pin by hand (FluidNC)', desc: 'For checking wiring on the bench. $GO=<pin> makes a pin an output, then $G+=<pin> switches it on and $G-=<pin> switches it off. $GI=<pin> makes a pin an input and $GR=<pin> reads it (on or off). Pins are written as in config.yaml, for example gpio.26.', syntax: '$GO=<pin> | $G+=<pin> | $G-=<pin> | $GI=<pin> | $GR=<pin>', example: '$GO=gpio.26\n$G+=gpio.26\n$G-=gpio.26', tips: 'These take hold of the pin directly. On a pin config.yaml already uses - a motor, the spindle, a relay - switching it can make the machine move or start, so keep clear. $GD lists every pin and what it is used for.', keywords: ['gpio', 'pin', 'test', 'output', 'input', 'wiring', 'relay', 'fluidnc'] },
+  { code: '$MI', aliases: ['$Motors/Init'], name: 'Set up the motor drivers again (FluidNC)', desc: 'Runs the stepper drivers\' set-up again, as at start-up. Useful for drivers that take their current and microstep settings over a data line (Trinamic) when motor power was switched on after the controller, so the drivers missed them the first time.', syntax: '$MI', example: '$MI', keywords: ['motors', 'drivers', 'trinamic', 'tmc', 'init', 'stepper', 'fluidnc'] },
+  { code: '$UP', aliases: ['$Uart/Passthrough'], name: 'Pass the connection through to another device (FluidNC)', desc: 'Connects your connection straight through to a device on one of FluidNC\'s serial ports - a pendant or display - usually to load new firmware into it. The port must have passthrough_baud set in config.yaml. $UP picks the first such port and $UP=<uart name> a particular one. It lasts for as long as data keeps flowing and ends by itself after 2 seconds of silence; add a time such as 5s ($UP=uart1,5s) to wait longer.', syntax: '$UP | $UP=<uart name> | $UP=<uart name>,<seconds>s', example: '$UP=uart1,5s', tips: 'While it lasts, FluidNC does not answer on that connection - ncSender will show it as not responding.', keywords: ['uart', 'passthrough', 'pendant', 'display', 'flash', 'serial', 'fluidnc'] },
+  { code: '$XR', aliases: ['$Xmodem/Receive', '$XS', '$Xmodem/Send'], name: 'Send or fetch a file over the cable (FluidNC)', desc: 'File transfer for terminal programs that speak the XModem protocol. $XR=<file> receives a file into the controller\'s flash (called "uploaded" if you give no name) and $XS=<file> sends one back (config.yaml if you give no name).', syntax: '$XR=<file> | $XS=<file>', example: '$XS=config.yaml', tips: 'ncSender\'s console does not speak XModem, so these are no use from there - use ncSender\'s Config tab or FluidNC\'s web page to move files.', keywords: ['xmodem', 'upload', 'download', 'file transfer', 'config.yaml', 'fluidnc'] },
   { code: '$NVX', aliases: ['$Settings/Erase'], name: 'Erase stored settings (FluidNC)', desc: 'Erases everything FluidNC keeps in its settings memory — named settings such as WiFi and the config file name, and the saved work offsets — back to defaults. The config.yaml file itself is not touched.', syntax: '$NVX', example: '$NVX', tips: 'Irreversible: note your work offsets ($#) and settings ($SC) first.', keywords: ['erase', 'factory reset', 'nvs', 'settings', 'fluidnc'] }
 ];
 
@@ -6174,6 +6420,7 @@ export const CONTROLLER_SUPPORT = {
   '$LocalFS/List': FLUIDNC_ONLY, '$SD/List': FLUIDNC_ONLY, '$Config/Filename': FLUIDNC_ONLY,
   '$Message/Level': FLUIDNC_ONLY, '$PL': FLUIDNC_ONLY, '$GD': FLUIDNC_ONLY, '$Limits': FLUIDNC_ONLY,
   '$T': FLUIDNC_ONLY, '$RM': FLUIDNC_ONLY, '$RI': FLUIDNC_ONLY, '$Heap': FLUIDNC_ONLY, '$NVX': FLUIDNC_ONLY,
+  '$LocalFS/Backup': FLUIDNC_ONLY, '$GI': FLUIDNC_ONLY, '$MI': FLUIDNC_ONLY, '$UP': FLUIDNC_ONLY, '$XR': FLUIDNC_ONLY,
 
   // ---- # parameters ----
   '#<_homed_state>': { grbl: GRBL_NO_PARAM, fluidnc: FNC_NO_PARAM },
@@ -6181,10 +6428,20 @@ export const CONTROLLER_SUPPORT = {
   '#<_x>': { grbl: GRBL_NO_PARAM, fluidnc: Y },
   '#<_abs_x>': { grbl: GRBL_NO_PARAM, fluidnc: Y },
   '#<_tool_offset>': { grbl: part('ncSender answers $#=_tool_offset, so tool-changer plugins work, but the parameter can\'t be used in an expression - that line is stopped.'), fluidnc: part('Not a FluidNC parameter - ncSender still answers $#=_tool_offset, so tool-changer plugins work.') },
-  '#<_current_tool>': { grbl: part('ncSender works out #<_current_tool>; #<_selected_tool> is not available.'), fluidnc: Y },
+  '#<_current_tool>': { grbl: part('ncSender works out #<_current_tool> only; the others are not available.'), fluidnc: part('#<_current_tool> and #<_selected_tool> work; FluidNC has no tool table, so no pockets or table size.') },
   '#<_probe_state>': { grbl: part('ncSender reads #<_probe_state> from Grbl\'s status report. #<_toolsetter_state> always reads 0 (Grbl has no tool setter input) and there is no second probe.'), fluidnc: FNC_NO_PARAM },
   '#<_speed_override>': { grbl: part('Only #<_feed> is worked out by ncSender. #<_speed_override> stops the line - Grbl has no override control (M51) - and the other two are not available.'),
-                          fluidnc: part('All four exist, but #<_speed_override> always reads 0.') },
+                          fluidnc: part('Different meaning on FluidNC: #<_speed_override> and #<_feed_override> read 1 while that override is away from 100 % and 0 at 100 %, and #<_feed_hold> is 1 while the machine is in feed hold. #<_feed> and #<_rpm> work as described.') },
+  '#<_motion_mode>': { grbl: part('ncSender works out #<_coord_system> only; the other three stop the line.'),
+                       fluidnc: Y },
+  '#<_inverse_time>': { grbl: GRBL_NO_PARAM, fluidnc: yes('#<_units_per_rev> always reads 0 - FluidNC has no G95.') },
+  '#<_spindle_on>': { grbl: GRBL_NO_PARAM, fluidnc: part('#<_spindle_on> and #<_spindle_cw> work; the two mode flags always read 0.') },
+  '#<_mist>': { grbl: GRBL_NO_PARAM, fluidnc: Y },
+  '#<_retract_r_plane>': { grbl: GRBL_NO_PARAM, fluidnc: FNC_NO_PARAM },
+  '#<_lathe_diameter_mode>': { grbl: GRBL_NO_PARAM, fluidnc: yes('All three always read 0 - FluidNC has no lathe modes.') },
+  '#<_line>': { grbl: GRBL_NO_PARAM, fluidnc: part('#<_line> exists but always reads 0; there is no #<_call_level>.') },
+  '#<_vmajor>': { grbl: GRBL_NO_PARAM, fluidnc: part('#<_vmajor> and #<_vminor> give FluidNC\'s own Grbl version number (not a build date); there is no #<_free_memory>.') },
+  '#<_value>': { grbl: no('Grbl has no G65 macros.'), fluidnc: no('FluidNC has no G65 macros.') },
   '#5061': { grbl: ncs('Grbl has no parameters - ncSender works out X, Y and Z (#5061-#5063) and #5070 from Grbl\'s probe report.'), fluidnc: yes('FluidNC keeps these in machine coordinates - ncSender converts them to work coordinates, as on grblHAL.') },
   '#5220': { grbl: GRBL_PARAM, fluidnc: Y },
   '#5221': { grbl: part('ncSender works these out for G54-G59; Grbl has no G59.1-G59.3.'), fluidnc: Y },

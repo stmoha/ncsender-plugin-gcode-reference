@@ -107,7 +107,7 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   check('$ESH alias -> $ES', r.first === '$ES', r.first);
   await p.fill('#gref-search', ''); await p.evaluate(() => grefSetCategory('params')); await p.waitForTimeout(100);
   const paramCodes = await p.evaluate(() => Array.from(document.querySelectorAll('.gref-card')).map(c => c.getAttribute('data-code')));
-  check('Parameters category lists grblHAL and plugin parameters', paramCodes.length >= 18 && paramCodes.includes('#5399') && paramCodes.includes('#<_nc_ref_tlo>'), paramCodes.join(','));
+  check('Parameters category lists grblHAL and plugin parameters', paramCodes.length >= 28 && paramCodes.includes('#<_mist>') && paramCodes.includes('#5399') && paramCodes.includes('#<_nc_ref_tlo>'), paramCodes.join(','));
   await p.evaluate(() => grefSetCategory('all'));
   await p.screenshot({ path: require('path').join(OUT, 'grbl-ref.png') });
   check('grbl: no page errors', p._errors.length === 0, p._errors.join(' | '));
@@ -127,6 +127,21 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   check('fluidnc: M62 runs', !/not on this controller/i.test(r.head), r.head);
   r = await lookup(p, 'G81');
   check('fluidnc: G81 flagged', /not on this controller/i.test(r.head), r.head);
+  // FluidNC additions (2.2.0)
+  r = await lookup(p, '$SD/Mkdir');
+  check('fluidnc: $SD/Mkdir alias -> SD card files', r.first === '$SD/List' && /newer than 4\.1\.1/.test(r.detail), r.first);
+  r = await lookup(p, '$RI');
+  check('fluidnc: $RI explains the negative interval', r.first === '$RI' && /while the machine is idle/.test(r.detail) && /50 at the least/.test(r.detail), r.detail.slice(0, 300));
+  r = await lookup(p, '$LocalFS/Format');
+  check('fluidnc: $LocalFS/Format -> backup / wipe entry', r.first === '$LocalFS/Backup' && !/not on this controller/i.test(r.head), r.first);
+  r = await lookup(p, '$GPIO/Read');
+  check('fluidnc: pin test commands', r.first === '$GI', r.first);
+  r = await lookup(p, '$XS');
+  check('fluidnc: $XS -> Xmodem entry', r.first === '$XR', r.first);
+  r = await lookup(p, '#<_spindle_on>');
+  check('fluidnc: #<_spindle_on> runs with a limit note', r.first === '#<_spindle_on>' && !/not on this controller/i.test(r.head) && /mode flags always read 0/.test(r.detail), r.detail.slice(-300));
+  r = await lookup(p, '#<_value2>');
+  check('fluidnc: #<_value2> alias flagged (no G65)', r.first === '#<_value>' && /not on this controller/i.test(r.head), r.head);
   r = await lookup(p, '$TLS');
   check('plugin note shown once', (r.detail.match(/Handled by the ncSender plugin/g) || []).length === 1, r.detail.slice(-300));
   r = await lookup(p, '$14');
@@ -147,7 +162,7 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   const lastHal = Math.max(...['$$','$EA','$EE','$ES','$SPINDLES','$F'].map(c => r.codes.indexOf(c)));
   await p.fill('#gref-search', ''); await p.evaluate(() => grefSetCategory('system')); await p.waitForTimeout(100);
   const sysCodes = await p.evaluate(() => Array.from(document.querySelectorAll('.gref-card')).map(c => c.getAttribute('data-code')));
-  const fncOnly = ['$CD','$SS','$CMD','$S','$SC','$L','$A','$E','$MD','$Bye','$LocalFS/List','$SD/List','$Config/Filename','$Message/Level','$PL','$GD','$Limits','$T','$RM','$RI','$Heap','$NVX'];
+  const fncOnly = ['$CD','$SS','$CMD','$S','$SC','$L','$A','$E','$MD','$Bye','$LocalFS/List','$SD/List','$Config/Filename','$Message/Level','$PL','$GD','$Limits','$T','$RM','$RI','$Heap','$NVX','$LocalFS/Backup','$GI','$MI','$UP','$XR'];
   const firstF = sysCodes.findIndex(c => fncOnly.includes(c));
   const lastRun = Math.max(...sysCodes.map((c, i) => (!fncOnly.includes(c) && !['$TLR','$TPW','$TTLOAD','$SPINDLES','$EG','$pins','$pinstate','$F','$REBOOT','$ES','$EE','$EA'].includes(c)) ? i : -1));
   check('grblhal: FluidNC-only entries sink below runnable ones', firstF > lastRun, sysCodes.join(','));
@@ -197,7 +212,7 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   const lines2 = ['(MSG, TOOL_CHANGE_START 7)', '(MSG, ZERO_KEEP_START T3)', '(MSG, PLUGIN_RAPIDCHANGEATC:MANUAL_LOAD_TOOL_3)', '(GATE_ABORT)',
                   '#<_nc_last_tlo> = [#5063 + #<_cur_wcs_z_ofs>]', '$keepout_off G53 G0 X-412.5 Y-38', '$PARK', '$#=_tool_offset',
                   'M66 P0 L3 Q2', 'o100 IF [#5399 EQ -1]', '(MSG, Roughing done)', '#1=[1 / #<_homed_state>] (SBT stop: home the machine first)', 'G42.1 D6.35',
-                  '#<_cur_wcs_z_ofs> = #[#<_ofs_idx>]', 'G43.1 Z[#<_nc_last_tlo>]', 'G10 L2 P[#5220] Z[#<_cur_wcs_z_ofs> - #<_nc_ref_tlo>]', 'G[#<return_units>]', 'o7101 IF [#<_nc_lib_ok>]'];
+                  '#<_cur_wcs_z_ofs> = #[#<_ofs_idx>]', 'G43.1 Z[#<_nc_last_tlo>]', 'G10 L2 P[#5220] Z[#<_cur_wcs_z_ofs> - #<_nc_ref_tlo>]', 'G[#<return_units>]', 'o7101 IF [#<_nc_lib_ok>]', 'o200 IF [#<_spindle_on> EQ 1 AND #<_coord_system> NE 540]'];
   p = await open('grblhal_offline', wrap(buildDialogHTML({ initialTab: 'explain', initialExplain: lines2.join('\n') })));
   await p.waitForTimeout(300);
   const ex2 = await p.evaluate(() => Array.from(document.querySelectorAll('.gref-exline')).map(el => el.textContent));
@@ -220,6 +235,7 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   check('explain2: P[#5220] keeps the G10 meaning', /worked out by the expression/.test(M(15)) && /\(for G10 L2\)/.test(M(15)) && /Remembered Z-Zero Tool Height/.test(M(15)), M(15).slice(0, 500));
   check('explain2: G[expression]', /G-code - its number is worked out/.test(M(16)) && /Units and Override to Put Back/.test(M(16)), M(16).slice(0, 300));
   check('explain2: IF is not taken for a word', !/worked out by the expression/.test(M(17)), M(17).slice(0, 300));
+  check('explain2: spindle and mode parameters', /Spindle State/.test(M(18)) && /Active Modes as Numbers/.test(M(18)), M(18).slice(0, 300));
   check('explain2: nothing flagged on grblHAL', !ex2.some(t => /can.t run|not valid G-code/.test(t)), ex2.filter(t => /can.t run|not valid/.test(t)).join(' || ').slice(0, 300));
   await p.screenshot({ path: require('path').join(OUT, 'hal-explain-markers.png'), fullPage: false });
   check('explain: no page errors', p._errors.length === 0, p._errors.join(' | '));
