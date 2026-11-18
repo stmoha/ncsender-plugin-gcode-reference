@@ -19,6 +19,8 @@ commands: README › Development.
   ncSender › Settings › Plugins › Install Plugin, then presses Ctrl+F5. Merge to
   `main` only after he says it's good. Changes to docs, tests or CI alone don't
   need a test ZIP.
+- **Better still, install the test build for him** (see "Pushing a test build to
+  ncSender"), and send the ZIP as well.
 - **Automate everything you can.** He only clicks what this session can't do:
   Publish release (prefilled link), registry pull requests (prefilled compare
   link), and repo settings and secrets.
@@ -68,6 +70,32 @@ commands: README › Development.
   text is cosmetic. To refresh it, push a branch to the `stmoha` fork and give
   him a compare link.
 - Commit as `Claude <noreply@anthropic.com>`, not as Stefan.
+
+## Pushing a test build to ncSender
+ncSender runs on a Linux Radxa on Stefan's network, not on his laptop (the
+laptop has an older ncSender install that is usually not running). A cloud
+session can't reach his network, so the install goes through his Windows laptop
+with the Desktop Commander connector. It worked this way for 2.2.0-test2.
+1. Push the branch first; the laptop takes the build from GitHub.
+2. `list_devices`: the laptop must be **Online**. If not, ask him to start
+   Desktop Commander there. Each call waits 3 s at most; longer commands carry on
+   in the background, so read the rest with `read_process_output`.
+3. From the laptop, the Radxa answers as `ncsender` (or `ncsender.local`) on port
+   8090. Before installing, check nothing is running: `/api/gcode-job/status`
+   (`jobLoaded`) and `/api/server-state`.
+4. Stage the package in `%TEMP%` on the laptop (PowerShell): download
+   `https://github.com/stmoha/ncsender-plugin-gcode-reference/archive/<sha>.zip`,
+   `Expand-Archive`, rename the top folder to `com.cncdocs.gcode-reference`, and
+   delete what `.scripts/package.sh` excludes. `commands.js` and `config.html`
+   are committed, so nothing is built there; compare `commands.js`'s SHA-256
+   with the session's.
+5. Zip it with **`tar.exe -a -cf <zip> -C <parent> com.cncdocs.gcode-reference`**.
+   Not `Compress-Archive`: Windows PowerShell writes paths with backslashes, and
+   ncSender on Linux then answers "No manifest.json found in plugin archive".
+6. Install: `curl.exe -F "plugin=@<zip>;type=application/zip" http://ncsender:8090/api/plugins/install`.
+   Then read `/api/plugins` back: the version should be the new one and
+   `runState` `running`. A failed install leaves the old version in place.
+7. Delete the temp folder, and tell him to press Ctrl+F5 in ncSender.
 
 ## Code map
 `commands.js` and `config.html` are **generated** by `node build/build.mjs` and
