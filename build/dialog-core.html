@@ -350,6 +350,7 @@
       { id: 'modes',    label: 'Modes',          dark: '#7bed9f', light: '#2e7d32' },
       { id: 'program',  label: 'Program Flow',   dark: '#c8d6e5', light: '#455a64' },
       { id: 'io',       label: 'I/O',            dark: '#70a1ff', light: '#3949ab' },
+      { id: 'params',   label: 'Parameters',     dark: '#bef264', light: '#4d7c0f' },
       { id: 'plugin',   label: 'Plugin codes', dark: '#e77f67', light: '#bf360c' },
       { id: 'setting',  label: '$ Settings',     dark: '#2dd4bf', light: '#0f766e' },
       { id: 'system',   label: '$ Commands',     dark: '#48dbfb', light: '#0277bd' }
@@ -624,7 +625,9 @@
 
       // pull out comments first - they are annotations, not commands -
       // except the ones that do something: (MSG, ...), (PRINT, ...),
-      // (DEBUG, ...) and ncSender's (MSG, NCSENDER_PAUSE: title | text)
+      // (DEBUG, ...), ncSender's (MSG, NCSENDER_PAUSE: title | text), and
+      // the markers ncSender and its tool-changer plugins write: tool
+      // change start/finish, zero keep, plugin prompts, gate abort blocks
       work = work.replace(/\(([^)]*)\)/g, function (mm, inner) {
         var ce = null, extra = '';
         var pause = inner.match(/^\s*MSG\s*,?\s*:?\s*NCSENDER_PAUSE\b\s*:?\s*(.*)$/i);
@@ -634,6 +637,14 @@
           extra = parts.length > 1
             ? ' - title "' + parts[0].trim() + '", message "' + parts.slice(1).join('|').trim() + '"'
             : (pause[1].trim() ? ' - "' + pause[1].trim() + '"' : '');
+        } else if (/^\s*MSG\s*[,:]?\s*TOOL_CHANGE_(START|COMPLETE)\b/i.test(inner)) {
+          ce = CODEMAP['TOOL_CHANGE_START'];
+        } else if (/^\s*MSG\s*[,:]?\s*ZERO_KEEP_(START|END)\b/i.test(inner)) {
+          ce = CODEMAP['ZERO_KEEP_START'];
+        } else if (/^\s*MSG\s*[,:]?\s*PLUGIN_[^:]+:/i.test(inner)) {
+          ce = CODEMAP['(MSG, PLUGIN_...)'];
+        } else if (/^\s*GATE_(ABORT_OFFERED|ABORT|END)\s*$/i.test(inner)) {
+          ce = CODEMAP['(GATE_ABORT)'];
         } else if (/^\s*MSG\s*[,:]/i.test(inner)) {
           ce = CODEMAP['(MSG)'];
         } else if (/^\s*(PRINT|DEBUG)\s*,/i.test(inner)) {
@@ -667,8 +678,8 @@
         } else {
           words.push({ tok: head, desc: 'System command or setting not in this reference - $ES (grblHAL) or $CMD (FluidNC) lists what your controller has', kind: 'unknown' });
         }
-        if (head.toUpperCase() === '$J') {
-          // explain the jog body as G-code
+        if (head.toUpperCase() === '$J' || head.toUpperCase() === '$KEEPOUT_OFF') {
+          // explain the jog body (or the move behind the prefix) as G-code
           var sub = explainLine(rest);
           sub.forEach(function (w) { words.push(w); });
           return words;
@@ -686,15 +697,49 @@
 
       // grblHAL macro / flow-control syntax is valid even though it isn't
       // letter+number words: o-words, #<vars>, [expressions], keywords
-      var FLOW_RE = /(^[oO]\d+)|(#<[^>]*>)|(#\d+)|(\[[^\]]*\])|\b(IF|THEN|ELSE|ELSEIF|ENDIF|WHILE|ENDWHILE|DO|REPEAT|ENDREPEAT|BREAK|CONTINUE|SUB|ENDSUB|CALL|RETURN|ALARM|ERROR|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|MOD)\b|(=\s*[+-]?(?:\d+\.?\d*|\.\d+))|(=)/g;
+      // (#[...] is a parameter whose number the expression works out)
+      var FLOW_RE = /(^[oO]\d+)|(#<[^>]*>)|(#\d+)|(#?\[[^\]]*\])|\b(IF|THEN|ELSE|ELSEIF|ENDIF|WHILE|ENDWHILE|DO|REPEAT|ENDREPEAT|BREAK|CONTINUE|SUB|ENDSUB|CALL|RETURN|ALARM|ERROR|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|MOD)\b|(=\s*[+-]?(?:\d+\.?\d*|\.\d+))|(=)/g;
       var fm;
+      // a documented parameter gets its description once per line; a
+      // second use of the same entry (#<_x> then #<_y>) shows the name only
+      var paramSeen = {};
+      function paramWord(tok, pe) {
+        var w = { tok: tok, desc: pe.name, kind: 'command', entry: pe };
+        if (!paramSeen[pe.code]) { w.sub = pe.desc; paramSeen[pe.code] = true; }
+        return w;
+      }
+      // a word whose value is worked out: Z[#5063 + 2], P[#5220], G[#<return_units>].
+      // The letter is claimed here and described once the line's commands are known.
+      var exprLetters = [];
       while ((fm = FLOW_RE.exec(work)) !== null) {
         markSpan(fm.index, fm[0].length);
         if (fm[7]) continue; // bare "=" of a parameter assignment
-        var pe = fm[2] ? CODEMAP[fm[2].toUpperCase()] : null; // e.g. a plugin's #<_name>
-        if (pe) words.push({ tok: fm[0], desc: pe.name, sub: pe.desc, kind: 'command', entry: pe });
+        if (fm[2] || fm[3] || fm[4]) {
+          var lk = fm.index - 1;
+          while (lk >= 0 && /\s/.test(work.charAt(lk))) lk--;
+          if (lk >= 0 && /[A-Za-z]/.test(work.charAt(lk)) && (lk === 0 || !/[A-Za-z#<_]/.test(work.charAt(lk - 1)))) {
+            markSpan(lk, 1);
+            var lw = { tok: work.charAt(lk).toUpperCase(), desc: '', kind: 'value' };
+            exprLetters.push(lw);
+            words.push(lw);
+          }
+        }
+        // a documented parameter: #<_name> (grblHAL's or a plugin's) or #5063
+        var pe = fm[2] ? CODEMAP[fm[2].toUpperCase()] : (fm[3] ? CODEMAP[fm[3]] : null);
+        if (pe) words.push(paramWord(fm[0], pe));
         else if (fm[6]) words.push({ tok: fm[6].replace(/^=\s*/, ''), desc: 'Value assigned to the parameter', kind: 'value' });
+        else if (fm[4] && fm[4].charAt(0) === '#') words.push({ tok: fm[0], desc: 'The parameter whose number this expression works out (grblHAL, FluidNC)', kind: 'value' });
         else words.push({ tok: fm[0], desc: 'Macro / expression syntax (grblHAL, FluidNC)', kind: 'value' });
+        // documented parameters used inside an [expression]
+        if (fm[4]) {
+          var inRe = /#<[^>]*>|#\d+/g, im, seenIn = {};
+          while ((im = inRe.exec(fm[4])) !== null) {
+            var ie = CODEMAP[im[0].toUpperCase()];
+            if (!ie || seenIn[im[0].toUpperCase()]) continue;
+            seenIn[im[0].toUpperCase()] = true;
+            words.push(paramWord(im[0], ie));
+          }
+        }
       }
 
       var re = /([A-Za-z])\s*([+-]?(?:\d+\.?\d*|\.\d+))/g;
@@ -765,6 +810,23 @@
         if (!meaning) meaning = DATA.letters[t.letter] || 'Unrecognized word';
         words.push({ tok: t.letter + t.value, desc: meaning + ' = ' + t.value,
                      kind: meaning === 'Unrecognized word' ? 'unknown' : 'value' });
+      });
+
+      // letters whose value comes from an expression
+      exprLetters.forEach(function (lw) {
+        var what = null;
+        if (lw.tok === 'G' || lw.tok === 'M') what = lw.tok + '-code';
+        else if (lw.tok === 'T') what = 'Tool select';
+        else {
+          for (var ei = 0; ei < cmdEntries.length; ei++) {
+            if (cmdEntries[ei].params && cmdEntries[ei].params[lw.tok]) {
+              what = cmdEntries[ei].params[lw.tok] + '  (for ' + cmdEntries[ei].code + ')';
+              break;
+            }
+          }
+          if (!what) what = DATA.letters[lw.tok] || 'Word';
+        }
+        lw.desc = what + ' - its ' + (/^[GMT]$/.test(lw.tok) ? 'number' : 'value') + ' is worked out by the expression that follows';
       });
 
       // anything not consumed by comments, flow syntax, or recognized
@@ -1552,7 +1614,8 @@
           out += '<div style="padding:5px 10px;font-size:0.76rem;color:' + badColor + ';border-left:3px solid ' + badColor +
                  ';margin:4px 0;background:rgba(255,107,129,0.08)">&#10007; ' +
                  esc(CTRL_LABEL[MACHINE.protocol] + ' can\u2019t run ' +
-                     blocked.map(function (w) { return w.entry.code; }).join(', ') +
+                     // a parameter family is one entry: name the one on the line
+                     blocked.map(function (w) { return w.entry.category === 'params' ? w.tok : w.entry.code; }).join(', ') +
                      (firstWhy ? ' \u2014 ' + firstWhy : '')) + '</div>';
         }
         out += '<div class="gref-exline-words">';

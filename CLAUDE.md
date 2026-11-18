@@ -82,12 +82,18 @@ committed. Never edit them; rebuild after every source change.
   - `SETTING_NOTES` holds per-setting notes, including FluidNC `config.yaml`
     keys. The build merges it in as `ctrl`.
   - An entry's `params` drive the line explainer; its `keywords` drive search.
+  - `#` parameters (grblHAL's and the ones plugins set) are `GCODE_DB` entries
+    with `category: 'params'`; several names share an entry through `aliases`.
+  - ncSender's own `$` commands (`$PARK`, `$SAFEZ` …) sit in `SYSTEM_DB` with
+    `NCS_OWN` support.
 - `build/build.mjs` merges those tables and injects the Explorer panel into the
   dialog. It also stamps `__BUILD_ID__` (version + hash of the dialog and
   database).
 - `build/dialog-core.html` is the whole dialog. Key functions:
   - Reference: `renderChips` (category column), `supportFor`/`renderSupport`.
   - G-code tab: `renderExplain`, `renderExplainOutput`, `loadGcodeFile`.
+    `explainLine` turns one line into words: comments and `(MSG, …)` markers,
+    `$` lines, then parameters and expressions (`FLOW_RE`), then letter words.
   - Mode badges: `modalStep`/`modalAt`/`modalBadges`, read from the file, not the
     machine.
   - Controller: `loadMachineSettings`. Shortcut setting: `initShortcut`.
@@ -160,8 +166,27 @@ committed. Never edit them; rebuild after every source change.
     appears more than once.
 
 ## Open items
-- **Next update:** check ncSender's latest source and the plugins in the registry
-  for `$` settings and `$` commands the database lacks. Stefan has spotted at
-  least one new one (Nov 2026).
+- **Database check, each update:** compare the database with ncSender's source,
+  every plugin repo in the registry and grblHAL core. Last done for 2.2.0
+  (18 Nov 2026) against ncSender v2.0.228 (the same commit as `main`), the 23
+  other registry plugins as of that day, and grblHAL build 20261117.
+  - All of them are public, so `git clone --depth 1` works without attaching them.
+  - ncSender: `src/NcSender.Server/CommandProcessor/` and
+    `src/NcSender.Core/Utils/GcodePatterns.cs` (its own `$` commands),
+    `Connection/CncEventBridge.cs` (the `(MSG, …)` markers it reads),
+    `Protocols/Grbl` and `Protocols/FluidNc` (what each controller gets), and
+    `docs/fluidnc-support.md`. `$` strings under `Pendant/`, `Dongle/` and
+    `Devices/` (`$OTA`, `$ID`, `$WIRE` …) are the pendant's serial protocol, not
+    console commands.
+  - Plugins: `commands.js` (`onBeforeCommand`) for `$` commands, M-codes, markers
+    and `#<…>` names; the README and `latest_release.md` for what changed.
+  - grblHAL: `settings.h` (the `setting_id_t` enum) against `SETTINGS_DB`,
+    `settings.c` for names and options, `system.c` (`sys_commands`),
+    `ngc_params.c`, and `changelog.md` since the last check.
+  - Left out on purpose: `$702` (cutter compensation options), `$721` (MPG port)
+    and `$474`/`$475` are ids reserved in `settings.h` with no setting behind them
+    yet. About 200 older firmware-plugin settings (WiFi, Bluetooth, plasma THC,
+    PID, panel, extra axes) have never been in the database; ask Stefan before
+    adding them.
 - Asked of Francis (siganberg) for the plugin API: right-click actions on
   G-code lines (GitHub Discussion #73 on siganberg/ncSender).

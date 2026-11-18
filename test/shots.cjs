@@ -12,6 +12,8 @@
 //   --name job.nc         file name ncSender reports (default: the file's own name)
 //   --units imperial      ncSender's Metric/Imperial setting (default: metric)
 //   --search probe        Reference tab search (default: probe)
+//   --category params     Reference tab category to select (the id: params, plugin, system ...)
+//   --landscape           a 1920x1080 screen instead of portrait 1080x1920
 //   --lines 15-19         G-code tab lines to select, 1-based (default: a good range of
 //                         the built-in job; required-ish with --file)
 //   --hide T5,rapid       Explorer legend layers to switch off: tools (T5) and/or rapid
@@ -107,7 +109,7 @@ const server = http.createServer((req, res) => {
   await new Promise(r => server.listen(0, r));
   const base = 'http://127.0.0.1:' + server.address().port + '/';
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1.5, colorScheme: 'dark' });
+  const p = await b.newPage({ viewport: process.argv.includes('--landscape') ? { width: 1920, height: 1080 } : { width: 1080, height: 1920 }, deviceScaleFactor: 1.5, colorScheme: 'dark' });
   const errors = []; p.on('pageerror', e => errors.push(String(e)));
   await p.goto(base);
   // what PluginDialog.vue does: v-html the dialog, then re-run its scripts
@@ -120,6 +122,7 @@ const server = http.createServer((req, res) => {
 
   if (ONLY.includes('reference')) {
     await p.fill('#gref-search', arg('search', 'probe')); await p.waitForTimeout(400);
+    if (arg('category')) { await p.evaluate((c) => grefSetCategory(c), arg('category')); await p.waitForTimeout(300); }
     files.push(await shot('reference'));
   }
   if (ONLY.includes('gcode')) {

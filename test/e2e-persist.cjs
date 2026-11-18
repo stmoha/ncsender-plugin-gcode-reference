@@ -185,7 +185,7 @@ const check = (n, ok, x) => { console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok ? '
   const cards = await p.evaluate(() => document.querySelectorAll('#gref-reflist .gref-card').length);
   const sameColumn = nav.every(x => Math.abs(x.left - nav[0].left) < 1);
   const probing = nav.find(x => x.label === 'Probing');
-  check('category column: one column, counts per category, All active', nav.length === 14 && sameColumn && nav[0].active && nav[0].n === cards && probing.n > 0, { nav: nav.slice(0, 5), cards });
+  check('category column: one column, counts per category, All active', nav.length === 15 && sameColumn && nav[0].active && nav[0].n === cards && probing.n > 0, { nav: nav.slice(0, 5), cards });
   await p.click('#gref-catnav .gref-cat:nth-child(4)'); await p.waitForTimeout(150); // Probing
   const after = await p.evaluate(() => ({ active: document.querySelector('#gref-catnav [data-active] .gref-cat-label').textContent,
     cats: Array.from(document.querySelectorAll('#gref-reflist .gref-card .gref-badge')).map(b => b.textContent).filter(t => /probing/i.test(t)).length,

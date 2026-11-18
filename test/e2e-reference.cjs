@@ -86,6 +86,29 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   check('M810 alias -> M960', r.first === 'M960', r.first);
   r = await lookup(p, '$C');
   check('$C present & runs', r.first === '$C' && !/not on this controller/i.test(r.head), r.head);
+  // ncSender's own commands, parameters and new grblHAL entries (2.2.0)
+  r = await lookup(p, '$PARK');
+  check('$PARK: found, handled by ncSender', r.first === '$PARK' && !/not on this controller/i.test(r.head) && /ncSender acts on this line itself/.test(r.detail), r.detail.slice(-300));
+  r = await lookup(p, '$safez');
+  check('$SAFEZ: found in any case', r.first === '$SAFEZ', r.first);
+  r = await lookup(p, '$keepout_off');
+  check('$keepout_off: found', r.first === '$keepout_off' && /ATC Zone/.test(r.detail), r.codes.slice(0, 4).join(','));
+  r = await lookup(p, '#5063');
+  check('#5063 alias -> last probe result', r.first === '#5061' && /Last Probe Result/.test(r.head), r.head);
+  r = await lookup(p, '#<_homed_state>');
+  check('grbl: #<_homed_state> flagged', r.first === '#<_homed_state>' && /not on this controller/i.test(r.head), r.head);
+  r = await lookup(p, 'G42');
+  check('grbl: G42 alias -> G41, flagged', r.first === 'G41' && /not on this controller/i.test(r.head), r.head);
+  r = await lookup(p, '$701');
+  check('$701 rotary options in DB', r.first === '$701' && /Rotary options/.test(r.head), r.head);
+  r = await lookup(p, '$60');
+  check('$60 renamed', /End program actions/.test(r.head) && /Restore G54/.test(r.detail), r.head);
+  r = await lookup(p, '$ESH');
+  check('$ESH alias -> $ES', r.first === '$ES', r.first);
+  await p.fill('#gref-search', ''); await p.evaluate(() => grefSetCategory('params')); await p.waitForTimeout(100);
+  const paramCodes = await p.evaluate(() => Array.from(document.querySelectorAll('.gref-card')).map(c => c.getAttribute('data-code')));
+  check('Parameters category lists grblHAL and plugin parameters', paramCodes.length >= 18 && paramCodes.includes('#5399') && paramCodes.includes('#<_nc_ref_tlo>'), paramCodes.join(','));
+  await p.evaluate(() => grefSetCategory('all'));
   await p.screenshot({ path: require('path').join(OUT, 'grbl-ref.png') });
   check('grbl: no page errors', p._errors.length === 0, p._errors.join(' | '));
   await p.close();
@@ -167,6 +190,38 @@ function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + 
   check('explain: PRINT recognized + blocked on grbl', /Print Values Comment/.test(L(10)) && /can.t run \(PRINT\)/.test(L(10)), L(10).slice(0, 300));
   check('explain: plain line clean', !/can.t run|not valid/.test(L(11)), L(11).slice(0, 200));
   await p.screenshot({ path: require('path').join(OUT, 'grbl-explain.png'), fullPage: false });
+  check('explain: no page errors (grbl)', p._errors.length === 0, p._errors.join(' | '));
+  await p.close();
+
+  // ---------- explain, grblHAL: markers, parameters, ncSender commands ----------
+  const lines2 = ['(MSG, TOOL_CHANGE_START 7)', '(MSG, ZERO_KEEP_START T3)', '(MSG, PLUGIN_RAPIDCHANGEATC:MANUAL_LOAD_TOOL_3)', '(GATE_ABORT)',
+                  '#<_nc_last_tlo> = [#5063 + #<_cur_wcs_z_ofs>]', '$keepout_off G53 G0 X-412.5 Y-38', '$PARK', '$#=_tool_offset',
+                  'M66 P0 L3 Q2', 'o100 IF [#5399 EQ -1]', '(MSG, Roughing done)', '#1=[1 / #<_homed_state>] (SBT stop: home the machine first)', 'G42.1 D6.35',
+                  '#<_cur_wcs_z_ofs> = #[#<_ofs_idx>]', 'G43.1 Z[#<_nc_last_tlo>]', 'G10 L2 P[#5220] Z[#<_cur_wcs_z_ofs> - #<_nc_ref_tlo>]', 'G[#<return_units>]', 'o7101 IF [#<_nc_lib_ok>]'];
+  p = await open('grblhal_offline', wrap(buildDialogHTML({ initialTab: 'explain', initialExplain: lines2.join('\n') })));
+  await p.waitForTimeout(300);
+  const ex2 = await p.evaluate(() => Array.from(document.querySelectorAll('.gref-exline')).map(el => el.textContent));
+  const M = (i) => ex2[i] || '';
+  check('explain2 lines rendered', ex2.length === lines2.length, ex2.length);
+  check('explain2: tool change marker', /Tool Change Markers/.test(M(0)), M(0).slice(0, 200));
+  check('explain2: zero keep marker', /Keep Z Zero/.test(M(1)), M(1).slice(0, 200));
+  check('explain2: plugin prompt', /Plugin Prompt Message/.test(M(2)), M(2).slice(0, 200));
+  check('explain2: gate abort marker', /Lines to Run on Abort/.test(M(3)), M(3).slice(0, 200));
+  check('explain2: plugin + numbered parameters', /Measured Tool Length/.test(M(4)) && /Last Probe Result/.test(M(4)) && /Z Offset of the Active Work System/.test(M(4)) && !/not valid G-code/.test(M(4)), M(4).slice(0, 400));
+  check('explain2: $keepout_off explains the move behind it', /ATC zone/i.test(M(5)) && /Rapid Positioning/.test(M(5)), M(5).slice(0, 400));
+  check('explain2: $PARK', /Park the machine/.test(M(6)), M(6).slice(0, 200));
+  check('explain2: $#= keeps the $# entry', /View G-code parameters/.test(M(7)), M(7).slice(0, 200));
+  check('explain2: #5399', /Result of the Last M66/.test(M(9)), M(9).slice(0, 300));
+  check('explain2: plain MSG still a message', /Message Comment/.test(M(10)) && !/Plugin Prompt/.test(M(10)), M(10).slice(0, 200));
+  check('explain2: homed guard', /Is the Machine Homed/.test(M(11)), M(11).slice(0, 300));
+  check('explain2: G42.1', /Cutter Compensation Left \/ Right/.test(M(12)) && /tool diameter/i.test(M(12)), M(12).slice(0, 300));
+  check('explain2: #[...] lookup is valid, shared description shown once', /whose number this expression works out/.test(M(13)) && (M(13).match(/Scratch values the tool-changer plugins use/g) || []).length === 1, M(13).slice(0, 500));
+  check('explain2: Z[expression] is a Z word', /Z-axis offset|Z-axis|offset/i.test(M(14)) && /worked out by the expression/.test(M(14)) && /Measured Tool Length/.test(M(14)), M(14).slice(0, 400));
+  check('explain2: P[#5220] keeps the G10 meaning', /worked out by the expression/.test(M(15)) && /\(for G10 L2\)/.test(M(15)) && /Remembered Z-Zero Tool Height/.test(M(15)), M(15).slice(0, 500));
+  check('explain2: G[expression]', /G-code - its number is worked out/.test(M(16)) && /Units and Override to Put Back/.test(M(16)), M(16).slice(0, 300));
+  check('explain2: IF is not taken for a word', !/worked out by the expression/.test(M(17)), M(17).slice(0, 300));
+  check('explain2: nothing flagged on grblHAL', !ex2.some(t => /can.t run|not valid G-code/.test(t)), ex2.filter(t => /can.t run|not valid/.test(t)).join(' || ').slice(0, 300));
+  await p.screenshot({ path: require('path').join(OUT, 'hal-explain-markers.png'), fullPage: false });
   check('explain: no page errors', p._errors.length === 0, p._errors.join(' | '));
   await p.close();
 

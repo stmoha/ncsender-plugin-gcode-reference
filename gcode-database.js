@@ -22,7 +22,9 @@
  *   aliases  - other spellings that should match ("G01" for "G1")
  *   name     - short human name
  *   category - one of: motion, coords, spindle, coolant, tool,
- *              program, modes, io, probing, cycles, plugin
+ *              program, modes, io, probing, cycles, plugin, params
+ *              (params = # parameters: grblHAL's own and the ones
+ *              ncSender plugins set)
  *   modal    - modal group name, or null for non-modal commands
  *   desc     - plain-language description
  *   syntax   - usage pattern
@@ -677,7 +679,7 @@ export const GCODE_DB = [
   "name": "Cancel Cutter Compensation",
   "category": "tool",
   "modal": "Cutter Comp",
-  "desc": "Disables cutter radius compensation. This is the default state; full G41/G42 compensation is not in the grblHAL core (plugin territory), so G40 mainly guarantees a known state.",
+  "desc": "Disables cutter radius compensation. This is the default state. Stock grblHAL has no G41/G42 compensation (it is an experimental build option), so G40 mainly guarantees a known state.",
   "syntax": "G40",
   "params": {},
   "example": "G40",
@@ -1329,7 +1331,7 @@ export const GCODE_DB = [
    "S": "Spindle speed (RPM) or laser power"
   },
   "example": "S18000 M3",
-  "tips": "With spindle-at-speed enabled ($340 tolerance) the controller waits for the VFD to reach speed. For laser engraving prefer M4 dynamic power.",
+  "tips": "With spindle-at-speed enabled ($340 tolerance) the controller waits for the VFD to reach speed. For laser engraving prefer M4 dynamic power. ncSender refuses M3 and M4 while the loaded tool is one that must not spin - a probe, or (from ncSender 2.0.228) a tool whose type in the tool library is Drag Knife or Pen - and a job that tries to start the spindle stops there.",
   "keywords": [
    "spindle",
    "on",
@@ -2170,8 +2172,8 @@ export const GCODE_DB = [
   "name": "Dust Boot State (Dust Docker)",
   "category": "plugin",
   "modal": null,
-  "desc": "Dust Docker keeps track of where the dust boot is. Setting these tells it without moving anything: #<_dust_boot_attached> = 1 means the boot is on the spindle, 0 means it is in its dock; #<_dust_boot_bypass> = 1 skips all docking until you set it back to 0. The plugin answers these lines itself - they never reach the controller.",
-  "syntax": "#<_dust_boot_attached> = 0|1 | #<_dust_boot_bypass> = 0|1",
+  "desc": "Dust Docker keeps track of where the dust boot is. Setting these tells it without moving anything: #<_dust_boot_attached> = 1 means the boot is on the spindle, 0 means it is in its dock; #<_dust_boot_bypass> = 1 skips all docking until you set it back to 0. The plugin answers these lines itself - they never reach the controller. Type a name on its own, with no = sign, and the plugin reports the current state (ATTACHED, DOCKED or UNKNOWN; ON or OFF for bypass). #<_dust_boot_attached> = UNKNOWN (or -1) makes the plugin ask where the boot is before the next tool change.",
+  "syntax": "#<_dust_boot_attached> = 0|1|UNKNOWN | #<_dust_boot_bypass> = 0|1 | #<_dust_boot_attached>",
   "params": {},
   "example": "#<_dust_boot_attached> = 0   (boot is in the dock)\n#<_dust_boot_bypass> = 1     (run this job without docking)",
   "tips": "After a successful $H the plugin assumes the boot is attached and bypass is off. If a tool change is blocked because the boot's location is unknown, check the machine and set the state (or use Mark Attached / Mark Docked in the plugin card) before restarting.",
@@ -2247,6 +2249,616 @@ export const GCODE_DB = [
    "variable",
    "value",
    "comment"
+  ]
+ },
+ {
+  "code": "G41",
+  "aliases": [
+   "G42",
+   "G41.1",
+   "G42.1"
+  ],
+  "name": "Cutter Compensation Left / Right",
+  "category": "tool",
+  "modal": "Cutter Comp",
+  "desc": "Shifts the toolpath sideways by the tool's radius, so the edge of the cutter - not its centre - follows the line you programmed. G41 keeps the tool to the left of the path, G42 to the right. G41 and G42 take the radius from the tool table (D picks the tool number; without D the loaded tool is used). G41.1 and G42.1 take the tool diameter straight from the D word. G40 turns it off again. Experimental: grblHAL only understands these codes from build 20260818 on, and only in firmware compiled with cutter compensation - other builds answer with an error.",
+  "syntax": "G41 [D<tool>] | G42 [D<tool>] | G41.1 D<diameter> | G42.1 D<diameter>",
+  "params": {
+   "D": "G41 / G42: tool number to take the radius from. G41.1 / G42.1: tool diameter"
+  },
+  "example": "G42.1 D6.35   (6.35 mm cutter, kept right of the path)\nG1 X50 F800\nG40",
+  "tips": "CAM for routers usually offsets the path itself (Fusion 360: compensation \"In computer\"), so most files never need these. Not available in the YZ plane (G19) or together with canned cycles.",
+  "keywords": [
+   "cutter compensation",
+   "comp",
+   "radius compensation",
+   "tool radius",
+   "offset",
+   "left",
+   "right",
+   "g42"
+  ]
+ },
+ {
+  "code": "TOOL_CHANGE_START",
+  "aliases": [
+   "TOOL_CHANGE_COMPLETE"
+  ],
+  "name": "Tool Change Markers (ncSender)",
+  "category": "plugin",
+  "modal": null,
+  "desc": "ncSender puts (MSG, TOOL_CHANGE_START <n>) in front of every M6 or $TLS sequence and (MSG, TOOL_CHANGE_COMPLETE <n>) behind it. The controller echoes each message when it actually reaches that line, which is how ncSender knows the tool change has really started or finished on the machine - not merely that the lines were sent. The number pairs a start with its finish.",
+  "syntax": "(MSG, TOOL_CHANGE_START <n>)\n...\n(MSG, TOOL_CHANGE_COMPLETE <n>)",
+  "params": {},
+  "example": "(MSG, TOOL_CHANGE_START 7)\n(... the tool change ...)\nG4 P0\n(MSG, TOOL_CHANGE_COMPLETE 7)",
+  "tips": "You never write these yourself. The console shows them as \"(tool change sentinel)\". The G4 P0 before the finish marker makes the controller complete every queued move first.",
+  "keywords": [
+   "tool change",
+   "sentinel",
+   "marker",
+   "msg",
+   "ncsender",
+   "m6",
+   "tls"
+  ]
+ },
+ {
+  "code": "ZERO_KEEP_START",
+  "aliases": [
+   "ZERO_KEEP_END"
+  ],
+  "name": "Keep Z Zero Through a Tool Change (tool-changer plugins)",
+  "category": "plugin",
+  "modal": null,
+  "desc": "If you set Z0 with a tool before any tool length had been measured, the next tool change would lose that zero. The tool-changer plugins (Rapid Change ATC, Manual Tool Changer, Pneumatic ATC) therefore measure the outgoing tool first, and wrap that extra measurement in these two messages. ncSender shows a banner while it runs. T<n> is the tool being measured.",
+  "syntax": "(MSG, ZERO_KEEP_START T<n>)\n...\n(MSG, ZERO_KEEP_END)",
+  "params": {},
+  "example": "(MSG, ZERO_KEEP_START T3)\n(... measure T3 on the tool setter ...)\n(MSG, ZERO_KEEP_END)",
+  "tips": "Added by the plugin on its own - nothing to type. Measuring a tool ($TLS) before setting Z0 avoids the extra trip to the tool setter.",
+  "keywords": [
+   "zero keep",
+   "z zero",
+   "tool change",
+   "tool length",
+   "reference",
+   "marker",
+   "msg"
+  ]
+ },
+ {
+  "code": "(MSG, PLUGIN_...)",
+  "aliases": [],
+  "name": "Plugin Prompt Message",
+  "category": "plugin",
+  "modal": null,
+  "desc": "A message that starts with PLUGIN_ and a plugin's name tells ncSender to open that plugin's dialog - Rapid Change ATC asking you to fit a tool by hand, for example, or Pneumatic ATC reporting low air pressure. An M0 follows it and holds the machine until you answer: Continue carries on, Abort stops with a soft reset. Tool-changer plugins write these lines into their M6 sequences; what each code means is up to the plugin.",
+  "syntax": "(MSG, PLUGIN_<NAME>:<CODE>)\nM0",
+  "params": {},
+  "example": "(MSG, PLUGIN_RAPIDCHANGEATC:MANUAL_LOAD_TOOL_3)\nM0",
+  "tips": "For your own prompt in a macro or an event field use the NCSENDER_PAUSE form instead - it takes a title and a message in your own words.",
+  "keywords": [
+   "plugin",
+   "prompt",
+   "dialog",
+   "gate",
+   "msg",
+   "manual load",
+   "tool change",
+   "rapidchange",
+   "pneumatic"
+  ]
+ },
+ {
+  "code": "(GATE_ABORT)",
+  "aliases": [
+   "(GATE_ABORT_OFFERED)",
+   "(GATE_END)"
+  ],
+  "name": "Lines to Run on Abort (ncSender)",
+  "category": "plugin",
+  "modal": null,
+  "desc": "Markers a plugin puts around one of its prompts so that Abort does more than stop. (GATE_ABORT_OFFERED) goes before the message; after the M0, the lines between (GATE_ABORT) and (GATE_END) run only if you press Abort - backing out of the tool rack, say - and then the usual soft reset follows. Continue skips that block. ncSender deals with the markers itself; they never reach the controller.",
+  "syntax": "(GATE_ABORT_OFFERED)\n(MSG, PLUGIN_<NAME>:<CODE>)\nM0\n(GATE_ABORT)\n<lines to run on Abort>\n(GATE_END)",
+  "params": {},
+  "example": "(GATE_ABORT_OFFERED)\n(MSG, PLUGIN_PNEUMATICATC:PRESSURE_FAULT)\nM0\n(GATE_ABORT)\nG53 G0 Z-5\nG4 P0\n(GATE_END)",
+  "tips": "A prompt without these markers keeps the plain behaviour: Abort is a soft reset and nothing else.",
+  "keywords": [
+   "gate",
+   "abort",
+   "prompt",
+   "plugin",
+   "marker",
+   "dialog",
+   "soft reset"
+  ]
+ },
+ {
+  "code": "#<_homed_state>",
+  "aliases": [
+   "#<_homed_axes>"
+  ],
+  "name": "Is the Machine Homed?",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_homed_state> is 1 when every axis that should be homed has been, and 0 when not. #<_homed_axes> gives the homed axes as a number (X = 1, Y = 2, Z = 4, added together). Read-only.",
+  "syntax": "#<_homed_state>",
+  "params": {},
+  "example": "o100 IF [#<_homed_state> EQ 0]\n(MSG, Home the machine first)\nM2\no100 ENDIF",
+  "tips": "Some generated files (Spoilboard Toolbox) start with #1=[1 / #<_homed_state>]: dividing by 0 makes the controller reject the line, so the program stops before it moves an unhomed machine.",
+  "keywords": [
+   "homed",
+   "homing",
+   "parameter",
+   "variable",
+   "named parameter",
+   "state"
+  ]
+ },
+ {
+  "code": "#<_metric>",
+  "aliases": [
+   "#<_imperial>",
+   "#<_absolute>",
+   "#<_incremental>"
+  ],
+  "name": "Units and Distance Mode Right Now",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_metric> is 1 while G21 (mm) is active and #<_imperial> is 1 while G20 (inches) is. #<_absolute> is 1 in G90 and #<_incremental> is 1 in G91. Macros read them so they can put things back the way they found them. Read-only.",
+  "syntax": "#<_metric> | #<_imperial> | #<_absolute> | #<_incremental>",
+  "params": {},
+  "example": "#<return_units> = [20 + #<_metric>]\nG21\n(... work in mm ...)\nG[#<return_units>]   (back to G20 or G21)",
+  "tips": null,
+  "keywords": [
+   "metric",
+   "imperial",
+   "units",
+   "absolute",
+   "incremental",
+   "g20",
+   "g21",
+   "g90",
+   "g91",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_x>",
+  "aliases": [
+   "#<_y>",
+   "#<_z>",
+   "#<_a>",
+   "#<_b>",
+   "#<_c>"
+  ],
+  "name": "Current Work Position",
+  "category": "params",
+  "modal": null,
+  "desc": "Where the machine is right now in the active work coordinate system (the numbers ncSender shows as work position), one parameter per axis. Read-only. In inches while G20 is active, in mm in G21.",
+  "syntax": "#<_x> | #<_y> | #<_z> | #<_a>",
+  "params": {},
+  "example": "G10 L20 P0 X[#<_x> / 2] Y[#<_y> / 2]   (halve the X and Y readout - centre between two touches)",
+  "tips": "The value is the position when the line is read, after all earlier moves have finished.",
+  "keywords": [
+   "position",
+   "work position",
+   "current position",
+   "wpos",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_abs_x>",
+  "aliases": [
+   "#<_abs_y>",
+   "#<_abs_z>",
+   "#<_abs_a>",
+   "#<_abs_b>",
+   "#<_abs_c>"
+  ],
+  "name": "Current Machine Position",
+  "category": "params",
+  "modal": null,
+  "desc": "Where the machine is right now in machine coordinates (measured from home), one parameter per axis. Read-only. Use it with G53 to come back to the same spot whatever the work offsets are.",
+  "syntax": "#<_abs_x> | #<_abs_y> | #<_abs_z>",
+  "params": {},
+  "example": "#<back_x> = #<_abs_x>\n#<back_y> = #<_abs_y>\n(... go somewhere else ...)\nG53 G0 X[#<back_x>] Y[#<back_y>]",
+  "tips": null,
+  "keywords": [
+   "machine position",
+   "mpos",
+   "absolute position",
+   "g53",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_tool_offset>",
+  "aliases": [],
+  "name": "Is a Tool Length Offset Active?",
+  "category": "params",
+  "modal": null,
+  "desc": "1 while a tool length offset is applied (G43, G43.1 or G43.2), 0 after G49 or when none has been set. ncSender asks for it with $#=_tool_offset to know whether the loaded tool has been measured. Read-only.",
+  "syntax": "#<_tool_offset>",
+  "params": {},
+  "example": "o100 IF [#<_tool_offset> EQ 0]\n$TLS\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "tool offset",
+   "tool length",
+   "tlo",
+   "g43",
+   "measured",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_current_tool>",
+  "aliases": [
+   "#<_selected_tool>"
+  ],
+  "name": "Tool Numbers",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_current_tool> is the number of the tool in the spindle (0 = none). #<_selected_tool> is the tool picked with a T word that M6 has not loaded yet, or -1 when nothing is waiting. Read-only.",
+  "syntax": "#<_current_tool> | #<_selected_tool>",
+  "params": {},
+  "example": "o100 IF [#<_current_tool> NE 3]\nT3 M6\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "tool",
+   "tool number",
+   "current tool",
+   "selected tool",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_probe_state>",
+  "aliases": [
+   "#<_toolsetter_state>",
+   "#<_probe2_state>"
+  ],
+  "name": "Probe and Tool Setter Inputs",
+  "category": "params",
+  "modal": null,
+  "desc": "The state of the probe input, the tool setter input and a second probe: 1 = triggered, 0 = not triggered, -1 = the board has no such input. Tool-changer plugins read them to check a tool is in the spindle (an infrared sensor wired to one of these inputs). Read-only.",
+  "syntax": "#<_probe_state> | #<_toolsetter_state> | #<_probe2_state>",
+  "params": {},
+  "example": "o100 IF [#<_probe_state> EQ 1]\n(MSG, The probe is already touching - check it)\nM0\no100 ENDIF",
+  "tips": "The value is read when the line is, so put G4 P0 in front to let earlier moves finish first.",
+  "keywords": [
+   "probe",
+   "tool setter",
+   "toolsetter",
+   "input",
+   "triggered",
+   "sensor",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_speed_override>",
+  "aliases": [
+   "#<_feed_override>",
+   "#<_feed>",
+   "#<_rpm>"
+  ],
+  "name": "Override Switches, Feed and Spindle Speed",
+  "category": "params",
+  "modal": null,
+  "desc": "#<_speed_override> is 1 while the spindle speed override is allowed to act (M51 P1) and 0 while a program has switched it off (M51 P0); #<_feed_override> is the same for the feed override (M50). They are on/off flags, not percentages. #<_feed> is the programmed feed rate and #<_rpm> the programmed spindle speed. Read-only.",
+  "syntax": "#<_speed_override> | #<_feed_override> | #<_feed> | #<_rpm>",
+  "params": {},
+  "example": "#<return_spov> = #<_speed_override>\nM51 P0   (run at the programmed speed)\n(... tool change ...)\nM51 P[#<return_spov>]",
+  "tips": "Tool-changer plugins switch the spindle override off for the change, so the collet nut is tightened at the speed they ask for, and put it back afterwards.",
+  "keywords": [
+   "override",
+   "spindle override",
+   "feed override",
+   "m50",
+   "m51",
+   "feed rate",
+   "rpm",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5061",
+  "aliases": [
+   "#5062",
+   "#5063",
+   "#5064",
+   "#5065",
+   "#5066",
+   "#5070"
+  ],
+  "name": "Last Probe Result",
+  "category": "params",
+  "modal": null,
+  "desc": "Where the last G38 probe move touched: #5061 = X, #5062 = Y, #5063 = Z (#5064 on for A, B, C), in the work coordinate system that was active. #5070 is 1 if that probe made contact and 0 if it did not. Tool length measuring and every probing routine are built on these.",
+  "syntax": "#5061 | #5062 | #5063 | #5070",
+  "params": {},
+  "example": "G38.2 Z-20 F100\n(PRINT, Touched at Z = #5063)",
+  "tips": null,
+  "keywords": [
+   "probe",
+   "probe result",
+   "probe position",
+   "g38",
+   "touch",
+   "prb",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5211",
+  "aliases": [
+   "#5212",
+   "#5213"
+  ],
+  "name": "G92 Offset",
+  "category": "params",
+  "modal": null,
+  "desc": "The temporary offset set with G92: #5211 = X, #5212 = Y, #5213 = Z. All 0 after G92.1.",
+  "syntax": "#5211 | #5212 | #5213",
+  "params": {},
+  "example": "(PRINT, G92 Z offset is #5213)",
+  "tips": null,
+  "keywords": [
+   "g92",
+   "offset",
+   "temporary offset",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5220",
+  "aliases": [],
+  "name": "Active Work Coordinate System Number",
+  "category": "params",
+  "modal": null,
+  "desc": "Which work coordinate system is active: 1 = G54, 2 = G55 ... 6 = G59, 7 = G59.1, 8 = G59.2, 9 = G59.3. Macros use it as the P number for G10 so they change whichever system you are working in.",
+  "syntax": "#5220",
+  "params": {},
+  "example": "G10 L20 P[#5220] Z0   (zero Z in the active system)",
+  "tips": null,
+  "keywords": [
+   "wcs",
+   "work coordinate system",
+   "g54",
+   "active",
+   "coordinate system",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5221",
+  "aliases": [
+   "#5222",
+   "#5223",
+   "#5241",
+   "#5242",
+   "#5243",
+   "#5261",
+   "#5262",
+   "#5263",
+   "#5281",
+   "#5282",
+   "#5283",
+   "#5301",
+   "#5302",
+   "#5303",
+   "#5321",
+   "#5322",
+   "#5323",
+   "#5341",
+   "#5342",
+   "#5343",
+   "#5361",
+   "#5362",
+   "#5363",
+   "#5381",
+   "#5382",
+   "#5383"
+  ],
+  "name": "Work Offsets (G54 - G59.3)",
+  "category": "params",
+  "modal": null,
+  "desc": "The stored offsets of each work coordinate system, in machine coordinates: #5221 / #5222 / #5223 are G54's X / Y / Z, #5241-#5243 G55's, and so on in steps of 20 up to #5381-#5383 for G59.3. Read-only here - change them with G10 L2 or G10 L20.",
+  "syntax": "#5221 (G54 X) | #5222 (G54 Y) | #5223 (G54 Z) | #5241 (G55 X) ...",
+  "params": {},
+  "example": "(PRINT, G54 Z offset is #5223)",
+  "tips": "The Z offset of the active system is parameter number [#5220 * 20 + 5203] - the sum tool-changer plugins use.",
+  "keywords": [
+   "work offset",
+   "wcs",
+   "offset",
+   "g54",
+   "g55",
+   "g59",
+   "coordinate system",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5399",
+  "aliases": [],
+  "name": "Result of the Last M66",
+  "category": "params",
+  "modal": null,
+  "desc": "What the last M66 (wait on / read an input) returned: the input's value, or -1 if the wait ran out of time. Tool-changer plugins use it to check sensors - tool present, drawbar, air pressure.",
+  "syntax": "#5399",
+  "params": {},
+  "example": "M66 P0 L3 Q2   (wait up to 2 s for input 0 to switch on)\no100 IF [#5399 EQ -1]\n(MSG, Sensor did not switch)\nM0\no100 ENDIF",
+  "tips": null,
+  "keywords": [
+   "m66",
+   "input",
+   "wait",
+   "sensor",
+   "timeout",
+   "result",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#5400",
+  "aliases": [
+   "#5401",
+   "#5402",
+   "#5403"
+  ],
+  "name": "Current Tool and Its Offsets",
+  "category": "params",
+  "modal": null,
+  "desc": "#5400 is the number of the tool in the spindle. #5401 / #5402 / #5403 are the tool offsets in effect for X / Y / Z - #5403 is the tool length offset.",
+  "syntax": "#5400 | #5403",
+  "params": {},
+  "example": "(PRINT, T#5400 length offset is #5403)",
+  "tips": null,
+  "keywords": [
+   "tool",
+   "tool number",
+   "tool offset",
+   "tool length",
+   "tlo",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_nc_last_tlo>",
+  "aliases": [
+   "#<_rc_trigger_mach_z>"
+  ],
+  "name": "Measured Tool Length (tool-changer plugins)",
+  "category": "params",
+  "modal": null,
+  "desc": "Set by the tool-changer plugins during $TLS: the machine Z at which the tool touched the tool setter. The next line, G43.1 Z[#<_nc_last_tlo>], makes it the tool length offset. Manual Tool Changer calls the same value #<_rc_trigger_mach_z>.",
+  "syntax": "#<_nc_last_tlo> = [#5063 + #<_cur_wcs_z_ofs>]",
+  "params": {},
+  "example": "#<_nc_last_tlo> = [#5063 + #<_cur_wcs_z_ofs>]\nG43.1 Z[#<_nc_last_tlo>]",
+  "tips": "Part of the plugin's tool-measuring sequence (turn on \"show macro commands\" in the plugin to see it). The value stays in the controller until it restarts.",
+  "keywords": [
+   "tool length",
+   "tlo",
+   "tls",
+   "tool setter",
+   "rapidchange",
+   "pneumatic",
+   "manual tool change",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_nc_ref_tlo>",
+  "aliases": [
+   "#<_nc_lib_ok>"
+  ],
+  "name": "Remembered Z-Zero Tool Height (tool-changer plugins)",
+  "category": "params",
+  "modal": null,
+  "desc": "The tool setter height of the tool you set Z0 with, remembered so the next tool can be measured against it and your Z zero stays put (see ZERO_KEEP_START). Pneumatic ATC also sets #<_nc_lib_ok> to 1 when that height agrees with the length stored in the tool library, so it can skip measuring again.",
+  "syntax": "#<_nc_ref_tlo> = #<_nc_last_tlo>",
+  "params": {},
+  "example": "G10 L2 P[#5220] Z[#<_cur_wcs_z_ofs> - #<_nc_ref_tlo>]",
+  "tips": null,
+  "keywords": [
+   "tool length",
+   "reference",
+   "zero keep",
+   "z zero",
+   "rapidchange",
+   "pneumatic",
+   "manual tool change",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_cur_wcs_z_ofs>",
+  "aliases": [
+   "#<_ofs_idx>"
+  ],
+  "name": "Z Offset of the Active Work System (tool-changer plugins)",
+  "category": "params",
+  "modal": null,
+  "desc": "Scratch values the tool-changer plugins use while measuring a tool. #<_ofs_idx> is the number of the parameter that holds the active work system's Z offset (#5223 for G54, #5243 for G55 ...), and #<_cur_wcs_z_ofs> is that offset. Adding it to the probe result turns a work-coordinate Z into a machine Z.",
+  "syntax": "#<_ofs_idx> = [#5220 * 20 + 5203]\n#<_cur_wcs_z_ofs> = #[#<_ofs_idx>]",
+  "params": {},
+  "example": "#<_ofs_idx> = [#5220 * 20 + 5203]\n#<_cur_wcs_z_ofs> = #[#<_ofs_idx>]\n#<_nc_last_tlo> = [#5063 + #<_cur_wcs_z_ofs>]",
+  "tips": null,
+  "keywords": [
+   "work offset",
+   "wcs",
+   "tool length",
+   "tls",
+   "rapidchange",
+   "pneumatic",
+   "manual tool change",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<return_units>",
+  "aliases": [
+   "#<return_spov>"
+  ],
+  "name": "Units and Override to Put Back (tool-changer plugins)",
+  "category": "params",
+  "modal": null,
+  "desc": "Tool-changer plugins work in millimetres with the spindle override switched off, whatever your program uses. Before they start they save your units in #<return_units> (20 for inches, 21 for mm) and whether the spindle override was on in #<return_spov>, and restore both when the change is done.",
+  "syntax": "#<return_units> = [20 + #<_metric>] ... G[#<return_units>]",
+  "params": {},
+  "example": "#<return_units> = [20 + #<_metric>]\nG21\n(... tool change ...)\nG[#<return_units>]",
+  "tips": null,
+  "keywords": [
+   "units",
+   "restore",
+   "override",
+   "tool change",
+   "g20",
+   "g21",
+   "m51",
+   "parameter",
+   "variable"
+  ]
+ },
+ {
+  "code": "#<_rcatc_ir>",
+  "aliases": [],
+  "name": "Last Tool Sensor Reading (Rapid Change ATC)",
+  "category": "params",
+  "modal": null,
+  "desc": "Rapid Change ATC keeps the last reading of its infrared tool sensor here when the sensor is wired to an Aux input. The plugin's dialog reads the input with M66 while the machine is idle and only reports back when the value has changed, so a sensor that sits still does not fill the console.",
+  "syntax": "#<_rcatc_ir>",
+  "params": {},
+  "example": "(PRINT, IR sensor last read #<_rcatc_ir>)",
+  "tips": null,
+  "keywords": [
+   "ir sensor",
+   "infrared",
+   "tool sensor",
+   "rapidchange",
+   "atc",
+   "m66",
+   "parameter",
+   "variable"
   ]
  }
 ];
@@ -2381,6 +2993,7 @@ export const SETTINGS_DB = [
   "code": "$10",
   "name": "Status report options",
   "desc": "SLB-EXT default: Position in machine coords: ON Buffer state: ON Line numbers: ON Feed & speed: ON Pin state: ON Work coord offset: ON Overrides: ON Probe coords: ON Buffer sync on WCO change: ON Parser state: OFF Alarm substatus: OFF Run substatus: OFF (511). Specifies optional data included in status reports. If Run substatus is enabled it may be used for simple probe protection. NOTE: Parser state will be sent separately after the status report and only on changes.",
+  "tips": "Newer grblHAL adds three more options after Run substatus: Enable when homing (4096), Distance-to-go (8192) and Extended (16384). Extended, new in build 20261015, lets the controller report extra data such as which probe (probe, tool setter or second probe) is triggered.",
   "keywords": [
    "options",
    "report",
@@ -2860,8 +3473,9 @@ export const SETTINGS_DB = [
  },
  {
   "code": "$60",
-  "name": "Restore overrides",
-  "desc": "SLB-EXT default: Enabled (1). Restore overrides to default values at program end.",
+  "name": "End program actions",
+  "desc": "SLB-EXT default: Enabled (1). What the controller puts back when a program ends with M2 or M30. Restore overrides (1): feed, rapid and spindle overrides go back to 100 %. Restore G54 (2): the work coordinate system goes back to G54. Add the numbers for both.",
+  "tips": "Called \"Restore overrides\" (on / off only) before grblHAL build 20261029 - older firmware has just the first option and always goes back to G54.",
   "keywords": [
    "overrides",
    "restore"
@@ -2890,7 +3504,8 @@ export const SETTINGS_DB = [
  {
   "code": "$63",
   "name": "Feed hold actions",
-  "desc": "SLB-EXT default: Disable laser: ON Restore spindle and coolant state: ON (3). Actions taken during feed hold and on resume from feed hold.",
+  "desc": "SLB-EXT default: Disable laser: ON Restore spindle and coolant state: ON (3). Actions taken during feed hold and on resume from feed hold. Disable laser during hold (1), Restore spindle and coolant state on resume (2), Set RPM to minimum during hold (4) - add the numbers for the ones you want.",
+  "tips": "\"Set RPM to minimum\" slows the spindle to its lowest speed (normally stopped) while held and is new in grblHAL build 20260813. It is ignored for a laser running in M4.",
   "keywords": [
    "actions",
    "feed",
@@ -3929,7 +4544,7 @@ export const SETTINGS_DB = [
  {
   "code": "$392",
   "name": "Spindle on delay",
-  "desc": "SLB-EXT default: 11 s. Delay to allow spindle to spin up after safety door is opened.",
+  "desc": "SLB-EXT default: 11 s. Delay to allow spindle to spin up after safety door is opened. Up to 60 s from grblHAL build 20260824 (20 s before).",
   "keywords": [
    "delay",
    "spindle"
@@ -3948,14 +4563,16 @@ export const SETTINGS_DB = [
  },
  {
   "code": "$394",
-  "name": "Spindle off delay (s)",
-  "desc": "grblHAL: pause after M5 — spin-down time.",
+  "name": "Spindle on delay",
+  "desc": "How long the controller waits after M3 or M4 for the spindle to come up to speed before it moves on: 0 for no wait, or 0.5 to 60 seconds (20 s at most before grblHAL build 20260824). With a spindle that reports its speed, it is the time allowed to reach that speed before alarm 14.",
   "keywords": [
    "spindle",
    "delay",
-   "spindown",
-   "off delay"
-  ]
+   "spin up",
+   "spinup",
+   "on delay"
+  ],
+  "tips": "The matching wait after M5 is $539, Spindle off delay."
  },
  {
   "code": "$395",
@@ -4473,7 +5090,7 @@ export const SETTINGS_DB = [
  {
   "code": "$539",
   "name": "Spindle off delay",
-  "desc": "(s) Spindle off delay",
+  "desc": "How long the controller waits after M5 for the spindle to stop before it moves on: 0 for no wait, or 0.5 to 60 seconds (20 s at most before grblHAL build 20260824).",
   "keywords": [
    "spindle",
    "off",
@@ -4789,6 +5406,35 @@ export const SETTINGS_DB = [
   "tips": "Core grblHAL setting - only present if your firmware build includes the feature. The reference flags whether your controller has it."
  },
  {
+  "code": "$701",
+  "name": "Rotary options",
+  "desc": "Two switches for rotary (A, B, C) axes. Fix feedrate (1): when a move turns a rotary axis and moves a linear axis together, the feed is worked out as inverse time so the cut does not crawl or race. Revert metric conversion (2): undoes the inch-to-mm conversion on rotary moves in G20, since degrees are not inches. Add the numbers for both; default 0.",
+  "keywords": [
+   "rotary",
+   "a axis",
+   "4th axis",
+   "feed rate",
+   "inverse time",
+   "degrees",
+   "inches"
+  ],
+  "tips": "New in grblHAL build 20260811 - before that \"Fix feedrate\" could only be chosen when the firmware was compiled."
+ },
+ {
+  "code": "$703",
+  "name": "MPG auto report interval",
+  "desc": "How often, in milliseconds, the controller sends a status report to a pendant (MPG) on its own: 25 to 1000, or 0 for never (the pendant then has to ask). Needs a restart of the controller to take effect.",
+  "keywords": [
+   "mpg",
+   "pendant",
+   "handwheel",
+   "status report",
+   "interval",
+   "auto report"
+  ],
+  "tips": "New in grblHAL build 20260928 and marked as lightly tested there."
+ },
+ {
   "code": "$709",
   "name": "PWM2 spindle options",
   "desc": "Options for the secondary PWM spindle output (PWM2, the SLB-EXT laser channel).",
@@ -4813,6 +5459,20 @@ export const SETTINGS_DB = [
    "spindle"
   ],
   "tips": "On older SLB 5.0.x firmware this lived at $743 (Invert laser signals)."
+ },
+ {
+  "code": "$720",
+  "name": "MPG baud rate",
+  "desc": "Speed of the serial port a pendant (MPG) is wired to: 0 = 38400, 1 = 115200 (default), 2 = 230400, 3 = 460800, 4 = 576000, 5 = 921600. It has to match the pendant.",
+  "keywords": [
+   "mpg",
+   "pendant",
+   "handwheel",
+   "baud",
+   "serial",
+   "uart"
+  ],
+  "tips": "New in grblHAL build 20260905; only on boards with a pendant port. $722-$729 are set aside for pendant plugins."
  },
  {
   "code": "$730",
@@ -5251,13 +5911,14 @@ export const SETTINGS_DB = [
 ];
 
 /**
- * grblHAL system ($) commands — configuration, control and queries.
+ * grblHAL system ($) commands — configuration, control and queries —
+ * followed by ncSender's own $ commands and FluidNC's.
  */
 export const SYSTEM_DB = [
-  { code: '$$',  name: 'View settings', desc: 'Prints every numbered setting and its current value.', keywords: ['settings', 'list', 'view', 'dump'] },
-  { code: '$#',  name: 'View G-code parameters', desc: 'Shows WCS offsets (G54-G59.3), G28/G30 positions, G92 offset, tool length offset and last probe result (PRB).', keywords: ['parameters', 'offsets', 'probe result', 'wcs', 'prb'] },
+  { code: '$$',  name: 'View settings', desc: 'Prints every numbered setting and its current value. On grblHAL, $<n> prints just one setting ($110) and $$=<n> prints that setting\'s name, unit, range and description.', syntax: '$$ | $<n> | $$=<n>', example: '$$=110', keywords: ['settings', 'list', 'view', 'dump', 'one setting', 'describe'] },
+  { code: '$#',  name: 'View G-code parameters', desc: 'Shows WCS offsets (G54-G59.3), G28/G30 positions, G92 offset, tool length offset and last probe result (PRB). $#=<number or name> prints a single parameter instead, for example $#=5063 (last probe Z) or $#=_tool_offset - ncSender sends that one itself to learn whether the loaded tool has been measured.', syntax: '$# | $#=<number> | $#=<name>', example: '$#=5063', keywords: ['parameters', 'offsets', 'probe result', 'wcs', 'prb', 'one parameter', 'tool offset'] },
   { code: '$G',  name: 'View parser state', desc: 'Shows the active modal G-codes (motion mode, WCS, plane, units, distance mode...), plus current T, F and S.', keywords: ['parser', 'state', 'modal', 'active modes'] },
-  { code: '$I',  name: 'Build info', desc: 'Prints the firmware build/version string and enabled options.', keywords: ['build', 'version', 'info', 'firmware'] },
+  { code: '$I',  name: 'Build info', desc: 'Prints the firmware build/version string and enabled options. On grblHAL, $I+ prints the extended version with everything the firmware reports about itself.', syntax: '$I | $I+', example: '$I', keywords: ['build', 'version', 'info', 'firmware', 'board', 'plugins'] },
   { code: '$N',  name: 'View startup blocks', desc: 'Shows the G-code lines run automatically at startup ($N0=, $N1= to set).', keywords: ['startup', 'blocks', 'boot'] },
   { code: '$X',  name: 'Kill alarm lock', desc: 'Unlocks the machine from an alarm state without homing. Position may be unknown afterward — use with caution.', keywords: ['unlock', 'alarm', 'kill', 'reset alarm'] },
   { code: '$C',  name: 'Check G-code mode', desc: 'Toggles check mode: the controller reads and checks every line it is sent but does not move, start the spindle or switch coolant — a dry run that turns up errors before you cut. Send $C again to leave check mode; Grbl and grblHAL reset themselves on the way out.', syntax: '$C', example: '$C\n(send or run the program)\n$C', tips: 'Probing and tool-change sequences can\'t really be tested this way — they depend on the machine actually moving.', keywords: ['check', 'check mode', 'dry run', 'verify', 'simulate', 'test program'] },
@@ -5268,15 +5929,31 @@ export const SYSTEM_DB = [
   { code: '$TPW', name: 'Tool probe workpiece', desc: 'Tool change protocol: probes the new tool to compute its dynamic offset. Available in tool change modes 1 and 2.', keywords: ['tool probe', 'toolsetter', 'tool change'] },
   { code: '$EA', name: 'Enumerate alarms', desc: 'Lists every alarm code with its description — decode alarm numbers here.', keywords: ['alarms', 'codes', 'enumerate', 'list'] },
   { code: '$EE', name: 'Enumerate errors', desc: 'Lists every error code with its description — decode error:NN messages here.', keywords: ['errors', 'codes', 'enumerate', 'list'] },
-  { code: '$ES', name: 'Enumerate settings', desc: 'Lists every setting the build supports with type, range, unit and description — the authoritative settings reference for YOUR controller.', keywords: ['settings', 'enumerate', 'describe', 'list'] },
+  { code: '$ES', aliases: ['$ESH', '$ESG'], name: 'Enumerate settings', desc: 'Lists every setting the build supports with type, range, unit and description — the authoritative settings reference for YOUR controller. $ESH and $ESG give the same list laid out for sender programs: ncSender reads $ESH to build its Firmware tab.', syntax: '$ES | $ESH | $ESG', keywords: ['settings', 'enumerate', 'describe', 'list'] },
   { code: '$EG', name: 'Enumerate setting groups', desc: 'Lists the hierarchy of setting groups.', keywords: ['groups', 'settings', 'enumerate'] },
   { code: '$pins', name: 'Enumerate pins', desc: 'Lists processor pin assignments — which MCU pin does what.', keywords: ['pins', 'mapping', 'enumerate'] },
   { code: '$pinstate', name: 'Pin states', desc: 'Shows the live state of auxiliary pins — great for debugging wiring.', keywords: ['pins', 'state', 'debug', 'aux'] },
-  { code: '$SPINDLES', name: 'Enumerate spindles', desc: 'Lists configured spindles and their numbers (for M104 P selection on multi-spindle setups).', keywords: ['spindles', 'enumerate', 'list', 'dual spindle'] },
-  { code: '$F', name: 'List files', desc: 'Lists G-code files in the current directory on SD/LittleFS. $F+ lists all files; $F=<file> runs one; $FD=<file> deletes; $FM/$FU mount/unmount; $CWD= changes directory; $PWD prints it.', keywords: ['files', 'sd card', 'list', 'run file', 'littlefs'] },
+  { code: '$SPINDLES', aliases: ['$SPINDLESH'], name: 'Enumerate spindles', desc: 'Lists configured spindles and their numbers (for M104 P selection on multi-spindle setups).', keywords: ['spindles', 'enumerate', 'list', 'dual spindle'] },
+  { code: '$F', name: 'List files', desc: 'Lists G-code files in the current directory on SD/LittleFS. $F+ lists all files; $F=<file> runs one; $FD=<file> deletes; $FM/$FU mount/unmount; $CWD= changes directory; $PWD prints it. From grblHAL build 20260726, $FMD=<folder> makes a folder and $FRD=<folder> removes one.', keywords: ['files', 'sd card', 'list', 'run file', 'littlefs', 'folder', 'directory'] },
   { code: '$RST', name: 'Restore defaults', desc: '$RST=$ restores settings to defaults, $RST=# clears WCS/G28/G30 offsets, $RST=* resets everything. Irreversible — note your settings first.', keywords: ['reset', 'restore', 'defaults', 'factory'] },
   { code: '$REBOOT', name: 'Reboot controller', desc: 'Hard-resets the controller. The connection drops.', keywords: ['reboot', 'restart', 'reset'] },
   { code: '$TTLOAD', name: 'Reload tool table', desc: 'Reloads the tool table from storage.', keywords: ['tool table', 'reload'] },
+
+  { code: '$HELP', name: 'Help', desc: 'Lists the help topics the controller knows. $HELP <topic> prints that topic - $HELP Commands lists every $ command in your firmware, including the ones plugins add.', syntax: '$HELP | $HELP <topic>', example: '$HELP', keywords: ['help', 'topics', 'commands', 'list'] },
+  { code: '$B', aliases: ['$O'], name: 'Block delete, single block and optional stop switches', desc: 'Switches for boards that have no physical input for them. $B turns block delete on or off (while on, lines that start with / are skipped). $O turns optional stop on or off (while on, M1 pauses the program). $S turns single block on or off (the program stops after every line and cycle start runs the next one). Each command flips its switch; the answer shows the new state.', syntax: '$B | $O | $S', example: '$O', tips: 'On a board that has a real input for one of these, the command for it is not available. On FluidNC $S means something else - it lists settings.', keywords: ['block delete', 'optional stop', 'single block', 'single step', 'm1', 'switch', 'toggle'] },
+  { code: '$HSS', aliases: ['$LIM', '$LEV'], name: 'Limit and homing switch states', desc: '$LIM prints which limit switches are triggered right now and $HSS does the same for the homing switches - press a switch by hand and send it again to check the wiring. $LEV prints the last control signal (reset, feed hold, door, e-stop ...) the controller saw, which helps when something stops the machine and you can\'t tell what.', syntax: '$LIM | $HSS | $LEV', example: '$LIM', keywords: ['limit switch', 'homing switch', 'wiring', 'test', 'signals', 'state'] },
+  { code: '$PORTS', name: 'List serial ports', desc: 'Lists the controller\'s serial (UART) ports and what each one is used for - pendant, Modbus for a VFD, and so on.', syntax: '$PORTS', example: '$PORTS', keywords: ['serial', 'uart', 'ports', 'modbus', 'pendant'] },
+  { code: '$RTC', name: 'Clock', desc: 'On boards with a clock, $RTC prints the controller\'s date and time and $RTC=<date and time> sets it. The clock is used to date files on the SD card.', syntax: '$RTC | $RTC=<YYYY-MM-DDThh:mm:ss>', example: '$RTC=2026-11-18T09:30:00', keywords: ['clock', 'time', 'date', 'rtc'] },
+  { code: '$SDS', aliases: ['$SD', '$SR'], name: 'Stepper and spindle encoder status', desc: '$SDS prints the status of the stepper drivers on boards whose drivers can report it. $SD prints the data from a spindle encoder and $SR resets it. Each is only there when the hardware is.', syntax: '$SDS | $SD | $SR', example: '$SDS', keywords: ['stepper', 'driver', 'status', 'spindle encoder', 'encoder'] },
+  { code: '$DFU', name: 'Firmware update mode', desc: 'Restarts the controller ready to take new firmware over USB (DFU mode). ncSender sends it for you when you update the firmware from its Firmware tab, then disconnects while the new firmware is written. Only on boards that support it, such as the Sienci SLB and SLB-EXT.', syntax: '$DFU', example: '$DFU', tips: 'The controller stops answering as a CNC controller once this is sent. If you sent it by mistake, power-cycle the board.', keywords: ['firmware', 'update', 'flash', 'dfu', 'bootloader'] },
+  { code: '$DWNGRD', name: 'Prepare settings for older firmware', desc: 'Marks the stored settings so that an older grblHAL build will accept them instead of resetting everything to defaults. Send it just before flashing an older version; sending it again turns the mark off.', syntax: '$DWNGRD', example: '$DWNGRD', tips: 'Save your settings to a file first all the same - a downgrade across many versions can still reset them.', keywords: ['downgrade', 'older firmware', 'settings', 'flash'] },
+
+  /* ---- ncSender's own $ commands: ncSender acts on these itself and
+     the line never reaches the controller. ---- */
+  { code: '$PARK', name: 'Park the machine (ncSender)', desc: 'Does what holding the Park button does: raises Z to your Safe Z height, then moves across to the saved parking spot, both in machine coordinates. ncSender turns the line into two G53 G0 moves, so it works typed in the console, in a program, in a macro or in an event field such as Program End. The parking spot is looked up when the line runs, so saving a new spot changes where your programs finish.', syntax: '$PARK', example: 'M5\n$PARK\nM30', tips: 'Refused, with the reason in the console, when the machine has to be homed first or no parking spot is saved yet (double-tap Park in the jog panel to save one). In a running job a refusal stops the job rather than letting it finish somewhere else. Needs ncSender 2.0.223 or later.', keywords: ['park', 'parking', 'safe z', 'program end', 'ncsender'] },
+  { code: '$SAFEZ', name: 'Raise to Safe Z (ncSender)', desc: 'Raises Z to the Safe Z height from ncSender\'s settings, in machine coordinates - the first move of $PARK on its own. ncSender sends it as one G53 G0 Z move, written in whichever units the program is in at that point, so your G20 or G21 is left alone.', syntax: '$SAFEZ', example: '$SAFEZ\nG0 X0 Y0', tips: 'Refused when the machine has to be homed first; in a running job that stops the job. Needs ncSender 2.0.228 or later.', keywords: ['safe z', 'retract', 'raise', 'clearance', 'ncsender'] },
+  { code: '$keepout_off', name: 'Let one move into an ATC zone (ncSender Pro)', desc: 'ncSender Pro treats each tool magazine as an ATC Zone: jogs stop at its edge and other moves are routed around it. Written in front of a move, $keepout_off lets that one line go in. The tool-changer plugins put it on each of their own G53 rack moves, one line at a time, so a tool change that is aborted halfway can\'t leave the check switched off. It lifts ATC zones only - keepout zones you drew yourself still apply.', syntax: '$keepout_off <move>', example: '$keepout_off G53 G0 X-412.5 Y-38', tips: 'A line you type this way shows "(keepout bypassed)" in the console. The Community edition has no keepout zones, so plugins leave the prefix off there. Not the same thing as M960, which switches the Sienci ATCi firmware\'s own keepout.', keywords: ['keepout', 'atc zone', 'magazine', 'rack', 'bypass', 'pro', 'ncsender'] },
+  { code: '$NCSENDER_CLEAR_MSG', name: 'Clear a saved plugin prompt (ncSender)', desc: 'Tells ncSender to forget the plugin prompt it has saved, so the dialog doesn\'t come back when the screen is refreshed. Tool-changer sequences can send it once a prompt has been dealt with.', syntax: '$NCSENDER_CLEAR_MSG', example: '$NCSENDER_CLEAR_MSG', keywords: ['clear', 'message', 'prompt', 'dialog', 'plugin', 'ncsender'] },
 
   /* ---- FluidNC's own $ commands. Most have a short and a long name
      ($CD = $Config/Dump); both work, in any letter case. ---- */
@@ -5365,6 +6042,15 @@ const GRBL_NO_CYCLES = no('No canned cycles - CAM has to output the moves in ful
 const FNC_NO_CYCLES = no('No canned cycles - CAM has to output the moves in full.');
 const HAL_PLUGIN = no('A grblHAL firmware-plugin code; not available here.');
 const FLUIDNC_ONLY = { grblhal: no('FluidNC only.'), grbl: no('FluidNC only.'), fluidnc: Y };
+const HAL_ONLY = BOTH(no('grblHAL only.'));
+const NCS_ALL = (note) => ({ grblhal: ncs(note), grbl: ncs(note), fluidnc: ncs(note) });
+const NCS_OWN = NCS_ALL('ncSender acts on this line itself; it is never sent to the controller.');
+// # parameters: grblHAL has them all; on classic Grbl ncSender works the
+// ones it knows out itself, and FluidNC has its own list.
+const GRBL_PARAM = ncs('Grbl has no parameters - ncSender works the value out itself and sends plain numbers.');
+const GRBL_NO_PARAM = no('Not one of the parameters ncSender works out for Grbl - the line is stopped.');
+const FNC_NO_PARAM = no('FluidNC has no parameter of this name.');
+const PLUGIN_PARAM = { grbl: ncs('Grbl has no parameters - ncSender keeps the value itself.'), fluidnc: Y };
 
 export const CONTROLLER_SUPPORT = {
   // ---- motion, planes, units, coordinates ----
@@ -5381,6 +6067,8 @@ export const CONTROLLER_SUPPORT = {
   'G38.2': BOTH(Y), 'G38.3': BOTH(Y), 'G38.4': BOTH(Y), 'G38.5': BOTH(Y),
   // ---- tool ----
   'G40': BOTH(Y), 'G43.1': BOTH(Y), 'G49': BOTH(Y),
+  'G41': { grblhal: part('Experimental, and only in firmware compiled with cutter compensation (build 20260818 or later).'),
+           grbl: no('No cutter compensation.'), fluidnc: no('No cutter compensation.') },
   'G43': { grbl: no('No tool table - ncSender stops G43 H and asks for G43.1 Z<offset> instead.'),
            fluidnc: no('No tool table (H word) - use G43.1 Z<offset>.') },
   // ---- modes ----
@@ -5448,12 +6136,16 @@ export const CONTROLLER_SUPPORT = {
   '#<_dust_boot_attached>': { grblhal: PLUG, grbl: PLUG, fluidnc: PLUG },
   // ---- comments and ncSender messages ----
   'NCSENDER_PAUSE': BOTH(Y),
+  'TOOL_CHANGE_START': BOTH(Y), 'ZERO_KEEP_START': BOTH(Y), '(MSG, PLUGIN_...)': BOTH(Y),
+  '(GATE_ABORT)': NCS_OWN,
   '(MSG)': { grbl: ncs('Grbl ignores comments; ncSender reports the message for you.'), fluidnc: Y },
   '(PRINT)': { grbl: no('Ignored - Grbl 1.1 has no parameters.'), fluidnc: Y },
 
   // ---- $ commands ----
   '$$': { grbl: Y, fluidnc: part('Lists only the Grbl-style numbers FluidNC mirrors from config.yaml; $S lists its own settings.') },
-  '$#': BOTH(Y), '$G': BOTH(Y), '$I': BOTH(Y), '$X': BOTH(Y), '$C': BOTH(Y), '$J=': BOTH(Y), '$SLP': BOTH(Y),
+  '$#': { grbl: part('$# works. Of the single-parameter form only $#=_tool_offset gets an answer (from ncSender); the others are dropped.'),
+          fluidnc: yes('$#=<n> is answered by ncSender - FluidNC itself only has the full $# list.') },
+  '$G': BOTH(Y), '$I': BOTH(Y), '$X': BOTH(Y), '$C': BOTH(Y), '$J=': BOTH(Y), '$SLP': BOTH(Y),
   '$N': { grbl: Y, fluidnc: no('No startup blocks - use startup_line0 / startup_line1 under macros: in config.yaml.') },
   '$H': { grbl: part('$H only - single-axis $HX / $HY / $HZ only if compiled in.'),
           fluidnc: yes('$HX, $HY, $HZ (and $HA …) home one axis.') },
@@ -5470,11 +6162,38 @@ export const CONTROLLER_SUPPORT = {
   '$RST': { grbl: Y, fluidnc: yes('$RST=@ also clears the WiFi settings.') },
   '$REBOOT': { grbl: no('grblHAL only - power-cycle or use the reset button.'), fluidnc: no('Use FluidNC\'s $Bye.') },
   '$TTLOAD': BOTH(no('No tool table.')),
-  '$CD': FLUIDNC_ONLY, '$SS': FLUIDNC_ONLY, '$CMD': FLUIDNC_ONLY, '$S': FLUIDNC_ONLY, '$SC': FLUIDNC_ONLY,
+  '$HELP': { grbl: no('Not in Grbl 1.1 - a plain $ prints its short help.'), fluidnc: no('Use FluidNC\'s $CMD.') },
+  '$B': { grbl: no('grblHAL only.'), fluidnc: no('grblHAL only - $S lists settings on FluidNC.') },
+  '$HSS': { grbl: no('grblHAL only - the Pn: part of the status report shows triggered switches.'), fluidnc: no('Use FluidNC\'s $Limits.') },
+  '$PORTS': HAL_ONLY, '$RTC': HAL_ONLY, '$SDS': HAL_ONLY, '$DFU': HAL_ONLY, '$DWNGRD': HAL_ONLY,
+  // ---- ncSender's own $ commands ----
+  '$PARK': NCS_OWN, '$SAFEZ': NCS_OWN, '$keepout_off': NCS_OWN, '$NCSENDER_CLEAR_MSG': NCS_OWN,
+  '$CD': FLUIDNC_ONLY, '$SS': FLUIDNC_ONLY, '$CMD': FLUIDNC_ONLY, '$SC': FLUIDNC_ONLY,
+  '$S': { grblhal: no('On grblHAL $S is a different command: it switches single block on or off (see $B).'), grbl: no('FluidNC only.'), fluidnc: Y },
   '$L': FLUIDNC_ONLY, '$A': FLUIDNC_ONLY, '$E': FLUIDNC_ONLY, '$MD': FLUIDNC_ONLY, '$Bye': FLUIDNC_ONLY,
   '$LocalFS/List': FLUIDNC_ONLY, '$SD/List': FLUIDNC_ONLY, '$Config/Filename': FLUIDNC_ONLY,
   '$Message/Level': FLUIDNC_ONLY, '$PL': FLUIDNC_ONLY, '$GD': FLUIDNC_ONLY, '$Limits': FLUIDNC_ONLY,
-  '$T': FLUIDNC_ONLY, '$RM': FLUIDNC_ONLY, '$RI': FLUIDNC_ONLY, '$Heap': FLUIDNC_ONLY, '$NVX': FLUIDNC_ONLY
+  '$T': FLUIDNC_ONLY, '$RM': FLUIDNC_ONLY, '$RI': FLUIDNC_ONLY, '$Heap': FLUIDNC_ONLY, '$NVX': FLUIDNC_ONLY,
+
+  // ---- # parameters ----
+  '#<_homed_state>': { grbl: GRBL_NO_PARAM, fluidnc: FNC_NO_PARAM },
+  '#<_metric>': { grbl: GRBL_PARAM, fluidnc: Y },
+  '#<_x>': { grbl: GRBL_NO_PARAM, fluidnc: Y },
+  '#<_abs_x>': { grbl: GRBL_NO_PARAM, fluidnc: Y },
+  '#<_tool_offset>': { grbl: part('ncSender answers $#=_tool_offset, so tool-changer plugins work, but the parameter can\'t be used in an expression - that line is stopped.'), fluidnc: part('Not a FluidNC parameter - ncSender still answers $#=_tool_offset, so tool-changer plugins work.') },
+  '#<_current_tool>': { grbl: part('ncSender works out #<_current_tool>; #<_selected_tool> is not available.'), fluidnc: Y },
+  '#<_probe_state>': { grbl: part('ncSender reads #<_probe_state> from Grbl\'s status report. #<_toolsetter_state> always reads 0 (Grbl has no tool setter input) and there is no second probe.'), fluidnc: FNC_NO_PARAM },
+  '#<_speed_override>': { grbl: part('Only #<_feed> is worked out by ncSender. #<_speed_override> stops the line - Grbl has no override control (M51) - and the other two are not available.'),
+                          fluidnc: part('All four exist, but #<_speed_override> always reads 0.') },
+  '#5061': { grbl: ncs('Grbl has no parameters - ncSender works out X, Y and Z (#5061-#5063) and #5070 from Grbl\'s probe report.'), fluidnc: yes('FluidNC keeps these in machine coordinates - ncSender converts them to work coordinates, as on grblHAL.') },
+  '#5220': { grbl: GRBL_PARAM, fluidnc: Y },
+  '#5221': { grbl: part('ncSender works these out for G54-G59; Grbl has no G59.1-G59.3.'), fluidnc: Y },
+  '#5211': { grbl: GRBL_PARAM, fluidnc: Y },
+  '#5399': { grbl: no('No controller inputs - ncSender stops M66.'), fluidnc: part('Only with digital inputs (digitalN_pin) set up in config.yaml.') },
+  '#5400': { grbl: part('ncSender works out #5400 (the tool number); the offsets #5401-#5403 are not available.'), fluidnc: Y },
+  '#<_nc_last_tlo>': PLUGIN_PARAM, '#<_nc_ref_tlo>': PLUGIN_PARAM, '#<_cur_wcs_z_ofs>': PLUGIN_PARAM,
+  '#<return_units>': { grbl: part('#<return_units> works (ncSender keeps it). #<return_spov> is not used - plugins leave the override lines out on Grbl.'), fluidnc: part('#<return_units> works. #<return_spov> is not used - plugins leave the override lines out, as FluidNC has no M51.') },
+  '#<_rcatc_ir>': { grbl: no('Needs M66 - Grbl has no controller inputs.'), fluidnc: part('Only with digital inputs set up in config.yaml.') }
 };
 
 /* ------------------------------------------------------------------
